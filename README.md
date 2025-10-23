@@ -1,5 +1,7 @@
 # H.O.M – History of Machines (MVP)
 
+[![CI Pipeline Status](https://github.com/BombInside/HOM_MVP/actions/workflows/ci.yml/badge.svg)](https://github.com/BombInside/HOM_MVP/actions/workflows/ci.yml)
+
 The Minimum Viable Product (MVP) for the H.O.M. system, designed for tracking machine repairs, downtimes, and collecting primary data from production lines. The architecture is built on an asynchronous Python stack utilizing GraphQL for efficient data interaction.
 
 ## 🚀 Core Technology Stack
@@ -75,7 +77,7 @@ This setup is used for development, testing, and debugging. It includes the Back
     ```
 
 3.  **Build and Start Services:**
-    The `--build` flag ensures that the latest code changes are included in the Docker images.
+    The `--build` flag ensures images are freshly built.
 
     ```bash
     docker compose up --build -d
@@ -129,4 +131,4 @@ The deployment is triggered automatically upon merging changes into the `main` b
     * The deployment script (or a separate service in `docker-compose.stage.yml`) ensures that **Alembic migrations** are run automatically and successfully **before** the main API service starts.
 
 ---
-*(End of README.md content)*
+Made with ❤️ by Valerii Semenov
