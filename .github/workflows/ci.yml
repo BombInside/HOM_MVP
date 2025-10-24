@@ -67,34 +67,29 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             # Настройки
-            # Обновленный путь развертывания на DO
-            DEPLOY_DIR="/var/www/hom_mvp/stage"
+            DEPLOY_DIR="/var/www/hom_mvp/stage" # Путь развертывания
             REPO_LOWER="${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}"
             IMAGE_REPO="ghcr.io/$REPO_LOWER"
             
             # 2. Переходим в директорию и создаем файл stage.env с помощью синтаксиса HEREDOC
             echo "Creating stage.env on remote server..."
+            # Убеждаемся, что директория существует и переходим в нее
+            mkdir -p ${DEPLOY_DIR}
             cd ${DEPLOY_DIR} || exit 1
             
             cat <<EOF > stage.env
-            # --- Secrets from GitHub ---
-            DB_URL=${{ secrets.DB_URL_STAGE }}
-            JWT_SECRET=${{ secrets.JWT_SECRET_STAGE }}
-            CORS_ORIGINS=${{ secrets.CORS_ORIGINS_STAGE }}
-            
-            # --- Fixed Config ---
-            APP_ENV=staging
-            JWT_EXPIRE_MIN=60
-            VITE_API_URL=http://${{ secrets.REMOTE_HOST }}:8000
-            
-            # --- Docker Image References for docker-compose.stage.yml ---
-            BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
-            FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
+DB_URL=${{ secrets.DB_URL_STAGE }}
+JWT_SECRET=${{ secrets.JWT_SECRET_STAGE }}
+CORS_ORIGINS=${{ secrets.CORS_ORIGINS_STAGE }}
+APP_ENV=staging
+JWT_EXPIRE_MIN=60
+VITE_API_URL=http://${{ secrets.REMOTE_HOST }}:8000
+BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
+FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
 EOF
-            
+     
             # 3. Выполняем развертывание с помощью Docker Compose
             echo "Running deployment..."
-            # Убедитесь, что docker-compose.stage.yml использует переменные BACKEND_IMAGE и FRONTEND_IMAGE
             docker compose -f docker-compose.stage.yml pull
             docker compose -f docker-compose.stage.yml up -d --force-recreate
             
