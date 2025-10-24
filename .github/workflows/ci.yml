@@ -35,7 +35,9 @@ jobs:
 
       - name: Set lowercase repository name
         id: repo_name
-        run: echo "REPOSITORY_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          echo "REPOSITORY_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - name: Docker Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -50,7 +52,6 @@ jobs:
         run: |
           docker build -t ghcr.io/$REPO_LOWER/hom-backend:main ./backend
           docker build -t ghcr.io/$REPO_LOWER/hom-frontend:main ./frontend
-
           docker push ghcr.io/$REPO_LOWER/hom-backend:main
           docker push ghcr.io/$REPO_LOWER/hom-frontend:main
 
@@ -63,30 +64,41 @@ jobs:
 
       - name: Set lowercase repository name
         id: repo_name
-        run: echo "REPOSITORY_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+        shell: bash
+        run: |
+          echo "REPOSITORY_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to DigitalOcean Droplet via SSH
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          # Передаём значения через env, чтобы не использовать ${{ ... }} внутри script/Her eDoc
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
+          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
+          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
+          REPO_LOWER: ${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: deployer
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
+            set -euo pipefail
+
             DEPLOY_DIR="/var/www/hom_mvp/stage"
-            REPO_LOWER="${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}"
-            IMAGE_REPO="ghcr.io/$REPO_LOWER"
+            IMAGE_REPO="ghcr.io/${REPO_LOWER}"
 
             echo "Creating stage.env on remote server..."
-            mkdir -p ${DEPLOY_DIR}
-            cd ${DEPLOY_DIR} || exit 1
+            mkdir -p "${DEPLOY_DIR}"
+            cd "${DEPLOY_DIR}"
 
-            cat <<EOF > stage.env
-DB_URL=$${{ secrets.DB_URL_STAGE }}
-JWT_SECRET=$${{ secrets.JWT_SECRET_STAGE }}
-CORS_ORIGINS=$${{ secrets.CORS_ORIGINS_STAGE }}
+            # Одинарно-цитированный HEREDOC исключает расширение оболочкой, нам это и нужно
+            cat <<'EOF' > stage.env
+DB_URL=${DB_URL_STAGE}
+JWT_SECRET=${JWT_SECRET_STAGE}
+CORS_ORIGINS=${CORS_ORIGINS_STAGE}
 APP_ENV=staging
 JWT_EXPIRE_MIN=60
-VITE_API_URL=http://$${{ secrets.REMOTE_HOST }}:8000
+VITE_API_URL=http://${REMOTE_HOST}:8000
 BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
 FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
 EOF
