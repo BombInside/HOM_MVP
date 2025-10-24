@@ -93,7 +93,7 @@ jobs:
             BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
             FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
 EOF
-            )
+            
 
             # Переходим в директорию и создаем файл stage.env
             cd ${DEPLOY_DIR} || exit 1
