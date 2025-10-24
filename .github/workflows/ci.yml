@@ -17,51 +17,66 @@ jobs:
       - name: Build
         run: python -m compileall app
         
-  # Измененный docker-build job для подготовки к пушу в GHCR
   docker-build:
     runs-on: ubuntu-latest
+    needs: [backend] # Зависит от успешного прохождения CI
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
+      
+      # 1. Создаем переменную со строчным именем репозитория для GHCR
+      - name: Set lowercase repository name
+        id: repo_name
+        run: echo "REPOSITORY_NAME_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+      
       - name: Docker Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # Используем GITHUB_TOKEN для аутентификации в GHCR
+          password: ${{ secrets.GITHUB_TOKEN }} 
           
       - name: Build and Push Images to GHCR
+        env:
+          # Получаем строковое имя репозитория
+          REPO_LOWER: ${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}
         run: |
-          # Тегируем образы для GHCR с тегом 'main'
-          docker build -t ghcr.io/${{ github.repository }}/hom-backend:main ./backend
-          docker build -t ghcr.io/${{ github.repository }}/hom-frontend:main ./frontend
+          # Тегируем и пушим образы с использованием строчного имени
+          docker build -t ghcr.io/$REPO_LOWER/hom-backend:main ./backend
+          docker build -t ghcr.io/$REPO_LOWER/hom-frontend:main ./frontend
           
-          # Пушим образы
-          docker push ghcr.io/${{ github.repository }}/hom-backend:main
-          docker push ghcr.io/${{ github.repository }}/hom-frontend:main
+          docker push ghcr.io/$REPO_LOWER/hom-backend:main
+          docker push ghcr.io/$REPO_LOWER/hom-frontend:main
 
-  # Новый job для Continuous Deployment (заменяет логику Vault)
   deploy:
     runs-on: ubuntu-latest
-    needs: [docker-build, backend] # Зависит от успешного билда и тестов
-    if: github.ref == 'refs/heads/main' # Развертываем только при пуше в main
+    needs: [docker-build]
+    # Развертываем только при пуше в main
+    if: github.ref == 'refs/heads/main' 
     steps:
       - uses: actions/checkout@v4
       
+      # 1. Создаем переменную со строчным именем репозитория для скрипта SSH
+      - name: Set lowercase repository name
+        id: repo_name
+        run: echo "REPOSITORY_NAME_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        
       - name: Deploy to DigitalOcean Droplet via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.REMOTE_HOST }}
-          username: deployer # Убедитесь, что пользователь 'deployer' существует на Droplet
+          username: deployer # Убедитесь, что этот пользователь существует на Droplet
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            DEPLOY_DIR="/var/www/hom_mvp/stage" # Используйте путь, который вы настроили на Droplet
-            IMAGE_REPO="ghcr.io/${{ github.repository }}"
+            # Настройки
+            DEPLOY_DIR="/var/www/hom_mvp/stage" # Обновите на ваш путь на Droplet
+            IMAGE_REPO="ghcr.io/${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}"
 
-            # 1. Создаем stage.env на Droplet, используя секреты GitHub
+            # 2. Создаем stage.env на Droplet, используя секреты GitHub
             echo "Creating stage.env on remote server..."
             
-            # Внимание: Эта переменная окружения должна быть настроена в GitHub Secrets
+            # Внимание: Убедитесь, что все эти переменные настроены в GitHub Secrets
             STAGING_ENV_VARS=$(cat <<EOF
             # --- Secrets from GitHub ---
             DB_URL=${{ secrets.DB_URL_STAGE }}
@@ -71,18 +86,20 @@ jobs:
             # --- Fixed Config ---
             APP_ENV=staging
             JWT_EXPIRE_MIN=60
+            # Используем REMOTE_HOST для VITE_API_URL
             VITE_API_URL=http://${{ secrets.REMOTE_HOST }}:8000
             
             # --- Docker Image References for docker-compose.stage.yml ---
             BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
             FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
-            EOF
+EOF
             )
 
+            # Переходим в директорию и создаем файл stage.env
             cd ${DEPLOY_DIR} || exit 1
             echo "$STAGING_ENV_VARS" > stage.env
             
-            # 2. Выполняем развертывание с помощью Docker Compose
+            # 3. Выполняем развертывание с помощью Docker Compose
             # Предполагается, что docker-compose.stage.yml уже существует в DEPLOY_DIR
             echo "Running deployment..."
             docker compose -f docker-compose.stage.yml pull
