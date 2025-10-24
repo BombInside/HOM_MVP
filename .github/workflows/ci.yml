@@ -19,7 +19,7 @@ jobs:
         
   docker-build:
     runs-on: ubuntu-latest
-    needs: [backend] # Зависит от успешного прохождения CI
+    needs: [backend]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -34,12 +34,10 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          # Используем GITHUB_TOKEN для аутентификации в GHCR
-          password: ${{ secrets.GITHUB_TOKEN }} 
+          password: ${{ secrets.GITHUB_TOKEN }}
           
       - name: Build and Push Images to GHCR
         env:
-          # Получаем строковое имя репозитория
           REPO_LOWER: ${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}
         run: |
           # Тегируем и пушим образы с использованием строчного имени
@@ -52,7 +50,6 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [docker-build]
-    # Развертываем только при пуше в main
     if: github.ref == 'refs/heads/main' 
     steps:
       - uses: actions/checkout@v4
@@ -66,18 +63,19 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.REMOTE_HOST }}
-          username: deployer # Убедитесь, что этот пользователь существует на Droplet
+          username: deployer
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             # Настройки
-            DEPLOY_DIR="/var/www/hom_mvp/stage" # Обновите на ваш путь на Droplet
-            IMAGE_REPO="ghcr.io/${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}"
-
-            # 2. Создаем stage.env на Droplet, используя секреты GitHub
-            echo "Creating stage.env on remote server..."
+            DEPLOY_DIR="/path/to/hom_mvp/stage" # Обновите на ваш путь на Droplet
+            REPO_LOWER="${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}"
+            IMAGE_REPO="ghcr.io/$REPO_LOWER"
             
-            # Внимание: Убедитесь, что все эти переменные настроены в GitHub Secrets
-            STAGING_ENV_VARS=$(cat <<EOF
+            # 2. Переходим в директорию и создаем файл stage.env с помощью надежного синтаксиса HEREDOC
+            echo "Creating stage.env on remote server..."
+            cd ${DEPLOY_DIR} || exit 1
+            
+            cat <<EOF > stage.env
             # --- Secrets from GitHub ---
             DB_URL=${{ secrets.DB_URL_STAGE }}
             JWT_SECRET=${{ secrets.JWT_SECRET_STAGE }}
@@ -86,7 +84,6 @@ jobs:
             # --- Fixed Config ---
             APP_ENV=staging
             JWT_EXPIRE_MIN=60
-            # Используем REMOTE_HOST для VITE_API_URL
             VITE_API_URL=http://${{ secrets.REMOTE_HOST }}:8000
             
             # --- Docker Image References for docker-compose.stage.yml ---
@@ -94,13 +91,7 @@ jobs:
             FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
 EOF
             
-
-            # Переходим в директорию и создаем файл stage.env
-            cd ${DEPLOY_DIR} || exit 1
-            echo "$STAGING_ENV_VARS" > stage.env
-            
             # 3. Выполняем развертывание с помощью Docker Compose
-            # Предполагается, что docker-compose.stage.yml уже существует в DEPLOY_DIR
             echo "Running deployment..."
             docker compose -f docker-compose.stage.yml pull
             docker compose -f docker-compose.stage.yml up -d --force-recreate
