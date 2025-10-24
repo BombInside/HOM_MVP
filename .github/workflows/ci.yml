@@ -1,13 +1,14 @@
 name: ci
 
+permissions:
+  contents: read
+  packages: write
+
 on:
   push:
     branches: ["main"]
   pull_request: {}
 
-permissions:
-  contents: read # Стандартное разрешение для чтения кода
-  packages: write # РАЗРЕШЕНИЕ ДЛЯ GHCR
 
 jobs:
   backend:
