@@ -67,11 +67,12 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             # Настройки
-            DEPLOY_DIR="/path/to/hom_mvp/stage" # Обновите на ваш путь на Droplet
+            # Обновленный путь развертывания на DO
+            DEPLOY_DIR="/var/www/hom_mvp/stage"
             REPO_LOWER="${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}"
             IMAGE_REPO="ghcr.io/$REPO_LOWER"
             
-            # 2. Переходим в директорию и создаем файл stage.env с помощью надежного синтаксиса HEREDOC
+            # 2. Переходим в директорию и создаем файл stage.env с помощью синтаксиса HEREDOC
             echo "Creating stage.env on remote server..."
             cd ${DEPLOY_DIR} || exit 1
             
@@ -93,6 +94,7 @@ EOF
             
             # 3. Выполняем развертывание с помощью Docker Compose
             echo "Running deployment..."
+            # Убедитесь, что docker-compose.stage.yml использует переменные BACKEND_IMAGE и FRONTEND_IMAGE
             docker compose -f docker-compose.stage.yml pull
             docker compose -f docker-compose.stage.yml up -d --force-recreate
             
