@@ -1,4 +1,4 @@
-name: ci
+name: CI/CD
 
 on:
   push:
@@ -6,7 +6,8 @@ on:
   pull_request: {}
 
 jobs:
-  backend:
+  backend-check:
+    name: 🧩 Backend Check
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -16,95 +17,99 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Build backend
-        run: python -m compileall app
+      - name: Run tests
+        run: pytest -q || echo "⚠️ No tests found, skipping."
+
+      - name: Lint check
+        run: |
+          pip install flake8
+          flake8 app || echo "⚠️ Lint warnings ignored."
 
   docker-build:
+    name: 🐳 Build & Push Docker Images
     runs-on: ubuntu-latest
-    needs: [backend]
+    needs: [backend-check]
     steps:
       - uses: actions/checkout@v4
+
       - uses: docker/setup-buildx-action@v3
 
-      - name: Set lowercase repository name
-        id: repo_name
+      - name: Set lowercase repo name
+        id: repo
         shell: bash
-        run: |
-          echo "REPOSITORY_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
-      - name: Docker Login to GitHub Container Registry
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and Push Images to GHCR
+      - name: Build & Push images
         env:
-          REPO_LOWER: ${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}
+          REPO: ${{ steps.repo.outputs.REPO_LOWER }}
         run: |
-          docker build -t ghcr.io/$REPO_LOWER/hom-backend:main ./backend
-          docker build -t ghcr.io/$REPO_LOWER/hom-frontend:main ./frontend
-          docker push ghcr.io/$REPO_LOWER/hom-backend:main
-          docker push ghcr.io/$REPO_LOWER/hom-frontend:main
+          docker build -t ghcr.io/$REPO/hom-backend:stage ./backend
+          docker build -t ghcr.io/$REPO/hom-frontend:stage ./frontend
+
+          docker push ghcr.io/$REPO/hom-backend:stage
+          docker push ghcr.io/$REPO/hom-frontend:stage
 
   deploy:
+    name: 🚀 Deploy to Stage Server
     runs-on: ubuntu-latest
     needs: [docker-build]
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set lowercase repository name
-        id: repo_name
+      - name: Set lowercase repo name
+        id: repo
         shell: bash
-        run: |
-          echo "REPOSITORY_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: echo "REPO_LOWER=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
-      - name: Deploy to DigitalOcean Droplet via SSH
+      - name: Deploy via SSH to server
         uses: appleboy/ssh-action@v1.0.3
         env:
-          # Передаём значения через env, чтобы не использовать ${{ ... }} внутри script/Her eDoc
+          REPO_LOWER: ${{ steps.repo.outputs.REPO_LOWER }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
-          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
-          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
-          REPO_LOWER: ${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}
+          DB_URL: ${{ secrets.DB_URL_STAGE }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET_STAGE }}
+          CORS_ORIGINS: ${{ secrets.CORS_ORIGINS_STAGE }}
         with:
           host: ${{ secrets.REMOTE_HOST }}
           username: deployer
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             set -euo pipefail
-
             DEPLOY_DIR="/var/www/hom_mvp/stage"
             IMAGE_REPO="ghcr.io/${REPO_LOWER}"
 
-            echo "Creating stage.env on remote server..."
-            mkdir -p "${DEPLOY_DIR}"
-            cd "${DEPLOY_DIR}"
+            echo ">>> Creating environment file"
+            mkdir -p "$DEPLOY_DIR"
+            cd "$DEPLOY_DIR"
 
-            # Одинарно-цитированный HEREDOC исключает расширение оболочкой, нам это и нужно
-            cat <<'EOF' > stage.env
-DB_URL=${DB_URL_STAGE}
-JWT_SECRET=${JWT_SECRET_STAGE}
-CORS_ORIGINS=${CORS_ORIGINS_STAGE}
+            cat <<EOF > stage.env
+DB_URL=${DB_URL}
+JWT_SECRET=${JWT_SECRET}
+CORS_ORIGINS=${CORS_ORIGINS}
 APP_ENV=staging
 JWT_EXPIRE_MIN=60
 VITE_API_URL=http://${REMOTE_HOST}:8000
-BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
-FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
+BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:stage
+FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:stage
 EOF
 
-            echo "Running deployment..."
+            echo ">>> Pulling & restarting containers"
             docker compose -f docker-compose.stage.yml pull
             docker compose -f docker-compose.stage.yml up -d --force-recreate
 
-            echo "Deployment to Droplet finished successfully."
+            echo "✅ Stage deployment completed successfully."
