@@ -1,64 +1,70 @@
 name: ci
+
 on:
-  push: { branches: ["main"] }
+  push:
+    branches: ["main"]
   pull_request: {}
+
 jobs:
   backend:
     runs-on: ubuntu-latest
-    defaults: { run: { working-directory: backend } }
+    defaults:
+      run:
+        working-directory: backend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - name: Install deps
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-      - name: Build
+
+      - name: Build backend
         run: python -m compileall app
-        
+
   docker-build:
     runs-on: ubuntu-latest
     needs: [backend]
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
-      
-      # ИСПРАВЛЕНО: Используем фильтр | lower для безопасного преобразования в строчный регистр
+
       - name: Set lowercase repository name
         id: repo_name
-        run: echo "REPOSITORY_NAME_LOWER=${{ github.repository | lower }}" >> $GITHUB_OUTPUT
-      
+        run: echo "REPOSITORY_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+
       - name: Docker Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-          
+
       - name: Build and Push Images to GHCR
         env:
           REPO_LOWER: ${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}
         run: |
-          # Тегируем и пушим образы с использованием строчного имени
           docker build -t ghcr.io/$REPO_LOWER/hom-backend:main ./backend
           docker build -t ghcr.io/$REPO_LOWER/hom-frontend:main ./frontend
-          
+
           docker push ghcr.io/$REPO_LOWER/hom-backend:main
           docker push ghcr.io/$REPO_LOWER/hom-frontend:main
 
   deploy:
     runs-on: ubuntu-latest
     needs: [docker-build]
-    if: github.ref == 'refs/heads/main' 
+    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      
-      # ИСПРАВЛЕНО: Повторяем использование фильтра | lower
+
       - name: Set lowercase repository name
         id: repo_name
-        run: echo "REPOSITORY_NAME_LOWER=${{ github.repository | lower }}" >> $GITHUB_OUTPUT
-        
+        run: echo "REPOSITORY_NAME_LOWER=${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
+
       - name: Deploy to DigitalOcean Droplet via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -66,31 +72,27 @@ jobs:
           username: deployer
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            # Настройки
-            DEPLOY_DIR="/var/www/hom_mvp/stage" # Путь развертывания
+            DEPLOY_DIR="/var/www/hom_mvp/stage"
             REPO_LOWER="${{ steps.repo_name.outputs.REPOSITORY_NAME_LOWER }}"
             IMAGE_REPO="ghcr.io/$REPO_LOWER"
-            
-            # 2. Переходим в директорию и создаем файл stage.env с помощью синтаксиса HEREDOC
+
             echo "Creating stage.env on remote server..."
             mkdir -p ${DEPLOY_DIR}
             cd ${DEPLOY_DIR} || exit 1
-            
-            # Убедитесь, что нет отступов перед EOF!
+
             cat <<EOF > stage.env
-DB_URL=${{ secrets.DB_URL_STAGE }}
-JWT_SECRET=${{ secrets.JWT_SECRET_STAGE }}
-CORS_ORIGINS=${{ secrets.CORS_ORIGINS_STAGE }}
+DB_URL=$${{ secrets.DB_URL_STAGE }}
+JWT_SECRET=$${{ secrets.JWT_SECRET_STAGE }}
+CORS_ORIGINS=$${{ secrets.CORS_ORIGINS_STAGE }}
 APP_ENV=staging
 JWT_EXPIRE_MIN=60
-VITE_API_URL=http://${{ secrets.REMOTE_HOST }}:8000
+VITE_API_URL=http://$${{ secrets.REMOTE_HOST }}:8000
 BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
 FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
 EOF
-            
-            # 3. Выполняем развертывание с помощью Docker Compose
+
             echo "Running deployment..."
             docker compose -f docker-compose.stage.yml pull
             docker compose -f docker-compose.stage.yml up -d --force-recreate
-            
+
             echo "Deployment to Droplet finished successfully."
