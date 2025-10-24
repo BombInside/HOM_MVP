@@ -65,6 +65,9 @@ jobs:
           docker push ghcr.io/$REPO_LOWER/hom-backend:main
           docker push ghcr.io/$REPO_LOWER/hom-frontend:main
 
+      - name: Debug REMOTE_HOST
+          run: echo "REMOTE_HOST=${{ secrets.REMOTE_HOST }}"
+
   # 🚀 Deploy job
   deploy:
     runs-on: ubuntu-latest
