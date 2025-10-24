@@ -24,10 +24,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
       
-      # 1. Создаем переменную со строчным именем репозитория для GHCR
+      # ИСПРАВЛЕНО: Используем фильтр | lower для безопасного преобразования в строчный регистр
       - name: Set lowercase repository name
         id: repo_name
-        run: echo "REPOSITORY_NAME_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        run: echo "REPOSITORY_NAME_LOWER=${{ github.repository | lower }}" >> $GITHUB_OUTPUT
       
       - name: Docker Login to GitHub Container Registry
         uses: docker/login-action@v3
@@ -54,10 +54,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       
-      # 1. Создаем переменную со строчным именем репозитория для скрипта SSH
+      # ИСПРАВЛЕНО: Повторяем использование фильтра | lower
       - name: Set lowercase repository name
         id: repo_name
-        run: echo "REPOSITORY_NAME_LOWER=$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_OUTPUT
+        run: echo "REPOSITORY_NAME_LOWER=${{ github.repository | lower }}" >> $GITHUB_OUTPUT
         
       - name: Deploy to DigitalOcean Droplet via SSH
         uses: appleboy/ssh-action@v1.0.3
@@ -73,10 +73,10 @@ jobs:
             
             # 2. Переходим в директорию и создаем файл stage.env с помощью синтаксиса HEREDOC
             echo "Creating stage.env on remote server..."
-            # Убеждаемся, что директория существует и переходим в нее
             mkdir -p ${DEPLOY_DIR}
             cd ${DEPLOY_DIR} || exit 1
             
+            # Убедитесь, что нет отступов перед EOF!
             cat <<EOF > stage.env
 DB_URL=${{ secrets.DB_URL_STAGE }}
 JWT_SECRET=${{ secrets.JWT_SECRET_STAGE }}
@@ -87,7 +87,7 @@ VITE_API_URL=http://${{ secrets.REMOTE_HOST }}:8000
 BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
 FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
 EOF
-     
+            
             # 3. Выполняем развертывание с помощью Docker Compose
             echo "Running deployment..."
             docker compose -f docker-compose.stage.yml pull
