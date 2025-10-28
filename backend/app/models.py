@@ -24,11 +24,17 @@ Role.users = Relationship(back_populates="roles", link_model=UserRoleLink)
 class Line(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
+    # EN: Soft delete flag for historical data integrity
+    # RU: Флаг "мягкого" удаления для сохранения целостности исторических данных
+    is_deleted: bool = Field(default=False)
 
 class Machine(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     asset: str = Field(index=True, unique=True)
     line_id: int = Field(foreign_key="line.id")
+    # EN: Soft delete flag for historical data integrity
+    # RU: Флаг "мягкого" удаления для сохранения целостности исторических данных
+    is_deleted: bool = Field(default=False)
 
 class Repair(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
@@ -38,6 +44,9 @@ class Repair(SQLModel, table=True):
     started_at: datetime = Field(default_factory=datetime.utcnow)
     finished_at: Optional[datetime] = None
     created_by: int = Field(foreign_key="user.id")
+    # EN: Soft delete flag for historical data integrity
+    # RU: Флаг "мягкого" удаления для сохранения целостности исторических данных
+    is_deleted: bool = Field(default=False)
 
 class Downtime(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)

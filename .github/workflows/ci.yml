@@ -64,8 +64,7 @@ jobs:
 
           docker push ghcr.io/$REPO_LOWER/hom-backend:main
           docker push ghcr.io/$REPO_LOWER/hom-frontend:main
-      - name: Debug REMOTE_HOST
-        run: echo "REMOTE_HOST=${{ secrets.REMOTE_HOST }}"
+
 
   # 🚀 Deploy job
   deploy:
@@ -74,6 +73,17 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
+      - name: Debug REMOTE_HOST
+        run: echo "REMOTE_HOST=${{ secrets.REMOTE_HOST }}"
+
+      - name: Check SSH key exists
+        run: |
+          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
+            echo "❌ SSH_PRIVATE_KEY is empty"
+            exit 1
+          else
+            echo "✅ SSH_PRIVATE_KEY loaded (hidden for security)"
+          fi
 
       - name: Set lowercase repository name
         id: repo_name
