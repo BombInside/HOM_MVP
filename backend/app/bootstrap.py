@@ -15,11 +15,24 @@ async def ensure_db_exists():
     await engine_sys.dispose()
 
 async def seed_admin():
+    # EN: Only seed admin user and roles in development environment (SECURITY FIX)
+    # RU: Создаем администратора и роли только в среде разработки (ИСПРАВЛЕНИЕ БЕЗОПАСНОСТИ)
+    if settings.app_env != "dev":
+        # EN: Log that seeding is skipped
+        # RU: Логируем, что seeding пропущен
+        print("Skipping admin seed and role creation outside of development environment.")
+        return
+
     async with async_session() as session:
+        # EN: Role creation logic
+        # RU: Логика создания ролей
         for rn in ["Operator", "Technician", "Supervisor", "Manager", "Admin", "SystemAdmin"]:
             res = await session.execute(select(Role).where(Role.name == rn))
             if not res.scalar_one_or_none():
                 session.add(Role(name=rn, description=f"Role {rn}"))
+                
+        # EN: Admin user creation logic
+        # RU: Логика создания Admin пользователя
         res = await session.execute(select(User).where(User.email=="admin@hom.local"))
         if not res.scalar_one_or_none():
             session.add(User(email="admin@hom.local", hashed_password=hash_password("admin123")))

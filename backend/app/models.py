@@ -55,6 +55,9 @@ class Downtime(SQLModel, table=True):
     started_at: datetime = Field(default_factory=datetime.utcnow)
     finished_at: Optional[datetime] = None
     created_by: int = Field(foreign_key="user.id")
+    # EN: Soft delete flag for historical data integrity
+    # RU: Флаг "мягкого" удаления для сохранения целостности исторических данных
+    is_deleted: bool = Field(default=False)
 
 class AuditLog(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
