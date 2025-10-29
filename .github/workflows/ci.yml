@@ -119,8 +119,8 @@ jobs:
             EOF
 
             echo ">>> Deploying docker-compose.stage.yml..."
-            # 💡 ИСПРАВЛЕНИЕ: Замена 'docker compose' на 'docker-compose'
-            docker-compose -f docker-compose.stage.yml pull
-            docker-compose -f docker-compose.stage.yml up -d --force-recreate
+            # 💡 ОТКАТ К V2 СИНТАКСИСУ
+            docker compose -f docker-compose.stage.yml pull
+            docker compose -f docker-compose.stage.yml up -d --force-recreate
 
             echo "✅ Deployment to Droplet finished successfully."
