@@ -120,8 +120,7 @@ jobs:
 
             echo ">>> Deploying docker-compose.stage.yml..."
             
-            # 💡 ФИКС: Явно передаем env-файл команде pull
-            # 💡 Используем V1 синтаксис (docker-compose) для максимальной совместимости
+            # 💡 ФИКС: Используем docker-compose (V1) с флагом --env-file для корректной подстановки IMAGE_VAR
             docker-compose --env-file stage.env -f docker-compose.stage.yml pull
             docker-compose --env-file stage.env -f docker-compose.stage.yml up -d --force-recreate
 
