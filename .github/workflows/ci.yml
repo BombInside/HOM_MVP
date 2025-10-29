@@ -123,7 +123,7 @@ jobs:
             # 💡 КРИТИЧЕСКИЙ ФИКС: Загружаем переменные в окружение Bash
             source stage.env 
             
-            # 💡 ИСПОЛЬЗУЕМ V2 СИНТАКСИС (docker compose)
+            # 💡 V2 SYNTAX: Используем docker compose (с пробелом)
             docker compose -f docker-compose.stage.yml pull
             docker compose -f docker-compose.stage.yml up -d --force-recreate
 
