@@ -108,15 +108,15 @@ jobs:
 
             # 💡 Переменные доступны напрямую в HEREDOC
             cat <<EOF > stage.env
-DB_URL=${DB_URL_STAGE}
-JWT_SECRET=${JWT_SECRET_STAGE}
-CORS_ORIGINS=${CORS_ORIGINS_STAGE}
-APP_ENV=staging
-JWT_EXPIRE_MIN=60
-VITE_API_URL=http://${REMOTE_HOST}:8000
-BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
-FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
-EOF
+            DB_URL=${DB_URL_STAGE}
+            JWT_SECRET=${JWT_SECRET_STAGE}
+            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
+            APP_ENV=staging
+            JWT_EXPIRE_MIN=60
+            VITE_API_URL=http://${REMOTE_HOST}:8000
+            BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
+            FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
+            EOF
 
             echo ">>> Deploying docker-compose.stage.yml..."
             docker compose -f docker-compose.stage.yml pull
