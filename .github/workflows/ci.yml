@@ -73,61 +73,50 @@ jobs:
     if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
-      - name: Debug REMOTE_HOST
-        run: echo "REMOTE_HOST=${{ secrets.REMOTE_HOST }}"
-
-      - name: Check SSH key exists
-        run: |
-          if [ -z "${{ secrets.SSH_PRIVATE_KEY }}" ]; then
-            echo "❌ SSH_PRIVATE_KEY is empty"
-            exit 1
-          else
-            echo "✅ SSH_PRIVATE_KEY loaded (hidden for security)"
-          fi
-
-      - name: Set lowercase repository name
-        id: repo_name
+      
+      # 💡 НОВЫЙ ШАГ: Сначала определяем все переменные, которые нужны в скрипте SSH
+      - name: Define deployment environment variables
+        id: deploy_env
         shell: bash
         run: |
           REPO_LOWER=$(echo "${GITHUB_REPOSITORY}" | tr '[:upper:]' '[:lower:]')
           echo "REPO_LOWER=$REPO_LOWER" >> "$GITHUB_OUTPUT"
+          echo "DB_URL_STAGE=${{ secrets.DB_URL_STAGE }}" >> "$GITHUB_OUTPUT"
+          echo "JWT_SECRET_STAGE=${{ secrets.JWT_SECRET_STAGE }}" >> "$GITHUB_OUTPUT"
+          echo "CORS_ORIGINS_STAGE=${{ secrets.CORS_ORIGINS_STAGE }}" >> "$GITHUB_OUTPUT"
+          echo "REMOTE_HOST=${{ secrets.REMOTE_HOST }}" >> "$GITHUB_OUTPUT"
 
       - name: Deploy to DigitalOcean Droplet via SSH
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          REPO_LOWER: ${{ steps.repo_name.outputs.REPO_LOWER }}
-          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
-          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
-          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
-          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         with:
-          host: ${{ secrets.REMOTE_HOST }}
+          host: ${{ steps.deploy_env.outputs.REMOTE_HOST }}
           username: deployer
           key: ${{ secrets.SSH_PRIVATE_KEY }}
+          # 💡 ИСПРАВЛЕНИЕ: Явно передаем переменные в удаленный скрипт
+          envs: REPO_LOWER,DB_URL_STAGE,JWT_SECRET_STAGE,CORS_ORIGINS_STAGE,REMOTE_HOST
           script: |
-            set -euo pipefail
+            # set -euo pipefail # ⚠️ Можно оставить, если уверены, что все переменные переданы
+            set -e # Оставим только set -e (выйти при ошибке), так как -u вызвал проблему
+
             DEPLOY_DIR="/var/www/hom_mvp/stage"
+            # 💡 Переменная REPO_LOWER теперь доступна
             IMAGE_REPO="ghcr.io/${REPO_LOWER}"
 
             echo ">>> Creating stage.env on remote server..."
             mkdir -p "${DEPLOY_DIR}"
             cd "${DEPLOY_DIR}"
 
+            # 💡 Переменные доступны напрямую в HEREDOC
             cat <<EOF > stage.env
-            # --- Secrets from GitHub ---
-            DB_URL=${DB_URL_STAGE}
-            JWT_SECRET=${JWT_SECRET_STAGE}
-            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
-
-            # --- Fixed Config ---
-            APP_ENV=staging
-            JWT_EXPIRE_MIN=60
-            VITE_API_URL=http://${REMOTE_HOST}:8000
-
-            # --- Docker Image References ---
-            BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
-            FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
-            EOF
+DB_URL=${DB_URL_STAGE}
+JWT_SECRET=${JWT_SECRET_STAGE}
+CORS_ORIGINS=${CORS_ORIGINS_STAGE}
+APP_ENV=staging
+JWT_EXPIRE_MIN=60
+VITE_API_URL=http://${REMOTE_HOST}:8000
+BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
+FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
+EOF
 
             echo ">>> Deploying docker-compose.stage.yml..."
             docker compose -f docker-compose.stage.yml pull
