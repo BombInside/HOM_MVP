@@ -6,6 +6,10 @@ from pydantic import Field, ValidationError
 class Settings(BaseSettings):
     app_env: str = "dev"
     db_url: str = "postgresql+asyncpg://root@cockroachdb:26257/hom?sslmode=disable"
+
+    #EN: Add Redis URL for caching and tocken revocation
+    #RU: URL Redis для кеширования и отзыва токенов
+    redis_url: str = "redis://localhost:6379"
     
     # EN: JWT secret field. We check for a minimum length of 32 characters.
     # RU: Поле JWT секрета. Проверяем минимальную длину в 32 символа.
