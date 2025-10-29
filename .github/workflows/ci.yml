@@ -120,11 +120,9 @@ jobs:
 
             echo ">>> Deploying docker-compose.stage.yml..."
             
-            # 💡 КРИТИЧЕСКИЙ ФИКС: Загружаем переменные из stage.env в текущую сессию Bash
-            source stage.env 
-            
-            # 💡 V2 SYNTAX: Используем docker compose (с пробелом), так как вы обновили Docker на Droplet
-            docker compose -f docker-compose.stage.yml pull
-            docker compose -f docker-compose.stage.yml up -d --force-recreate
+            # 💡 ФИКС: Явно передаем env-файл команде pull
+            # 💡 Используем V1 синтаксис (docker-compose) для максимальной совместимости
+            docker-compose --env-file stage.env -f docker-compose.stage.yml pull
+            docker-compose --env-file stage.env -f docker-compose.stage.yml up -d --force-recreate
 
             echo "✅ Deployment to Droplet finished successfully."
