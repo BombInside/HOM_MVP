@@ -44,10 +44,8 @@ COPY alembic.ini ./alembic.ini
 COPY alembic ./alembic
 COPY requirements.txt ./requirements.txt
 
-# ----------------------------------------------------
 # EN: Command to run bootstrap, migration, and start the Uvicorn server
 # RU: Команда для запуска bootstrap, миграции и старта сервера Uvicorn
-# ----------------------------------------------------
 CMD bash -c "\
   echo 'Checking DB and Redis readiness...'; \
   # EN: Loop until both CockroachDB (SQL port 26257) AND Redis (6379) respond to connection attempt \

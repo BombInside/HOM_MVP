@@ -121,6 +121,7 @@ jobs:
             echo ">>> Deploying docker-compose.stage.yml..."
             
             # 💡 КРИТИЧЕСКИЙ ФИКС: Загружаем переменные в окружение Bash
+            # Это гарантирует, что docker compose увидит IMAGE_REPO переменные
             source stage.env 
             
             # 💡 V2 SYNTAX: Используем docker compose (с пробелом)
