@@ -101,18 +101,12 @@ jobs:
           script: |
             set -e 
             DEPLOY_DIR="/var/www/hom_mvp/stage"
-            
-            # 1. EXPORT VARIABLES NEEDED FOR DOCKER COMPOSE PULL
-            # This is the CRITICAL FIX: we define and export image variables explicitly to the shell environment.
-            export IMAGE_REPO="ghcr.io/${REPO_LOWER}"
-            export BACKEND_IMAGE="${IMAGE_REPO}/hom-backend:main"
-            export FRONTEND_IMAGE="${IMAGE_REPO}/hom-frontend:main"
+            IMAGE_REPO="ghcr.io/${REPO_LOWER}"
 
             echo ">>> Creating stage.env on remote server..."
             mkdir -p "${DEPLOY_DIR}"
             cd "${DEPLOY_DIR}"
 
-            # 2. Create stage.env (contains secrets for containers via env_file)
             cat <<EOF > stage.env
             DB_URL=${DB_URL_STAGE}
             JWT_SECRET=${JWT_SECRET_STAGE}
@@ -120,13 +114,20 @@ jobs:
             APP_ENV=staging
             JWT_EXPIRE_MIN=60
             VITE_API_URL=http://${REMOTE_HOST}:8000
-            REDIS_URL=redis://redis:6379 
+            BACKEND_IMAGE=${IMAGE_REPO}/hom-backend:main
+            FRONTEND_IMAGE=${IMAGE_REPO}/hom-frontend:main
             EOF
 
             echo ">>> Deploying docker-compose.stage.yml..."
             
-            # 3. Pull and Up. Docker Compose will now use the exported variables 
-            # (BACKEND_IMAGE, FRONTEND_IMAGE) for the image names.
+            # 💡 ФИКС: Используем set -a и source вместе для надежного экспорта переменных
+            # EN: Automatically export variables sourced from stage.env
+            # RU: Автоматически экспортировать переменные, полученные из stage.env
+            set -a
+            source stage.env
+            set +a 
+            
+            # 💡 V2 SYNTAX: Используем docker compose (с пробелом)
             docker compose -f docker-compose.stage.yml pull
             docker compose -f docker-compose.stage.yml up -d --force-recreate
 
