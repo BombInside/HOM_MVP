@@ -119,7 +119,11 @@ jobs:
             EOF
 
             echo ">>> Deploying docker-compose.stage.yml..."
-            # 💡 ОТКАТ К V2 СИНТАКСИСУ
+            
+            # 💡 КРИТИЧЕСКИЙ ФИКС: Загружаем переменные из stage.env в текущую сессию Bash
+            source stage.env 
+            
+            # 💡 V2 SYNTAX: Используем docker compose (с пробелом), так как вы обновили Docker на Droplet
             docker compose -f docker-compose.stage.yml pull
             docker compose -f docker-compose.stage.yml up -d --force-recreate
 
