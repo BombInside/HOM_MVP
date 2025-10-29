@@ -1,8 +1,8 @@
 import strawberry
 from typing import List, Optional 
-# EN: Added HTTPException for auth checks
-# RU: Добавлен HTTPException для проверок аутентификации
-from fastapi import Depends, HTTPException
+# EN: Added HTTPException and status for auth checks
+# RU: Добавлен HTTPException и status для проверок аутентификации
+from fastapi import Depends, HTTPException, status 
 from datetime import datetime 
 from strawberry.fastapi import GraphQLRouter
 from sqlmodel import select
@@ -12,20 +12,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel, field_validator 
 from ..db import async_session
 from ..models import Line, Machine, AuditLog, User, Repair
-# EN: Import the new dependency for getting the current authenticated user
-# RU: Импортируем новую зависимость для получения текущего аутентифицированного пользователя
-from ..auth import get_current_user 
+# EN: Import the authentication and RBAC helpers
+# RU: Импортируем вспомогательные функции аутентификации и RBAC
+from ..auth import get_current_user, has_role 
 
 async def get_session() -> AsyncSession:
     async with async_session() as s:
         yield s
 
 # ----------------------------------------------------
-# EN: Context getter updated to use real authentication (SECURITY FIX)
-# RU: Context getter обновлен для использования реальной аутентификации (ИСПРАВЛЕНИЕ БЕЗОПАСНОСТИ)
+# EN: Context getter uses real authentication (SECURITY FIX)
+# RU: Context getter использует реальную аутентификацию (ИСПРАВЛЕНИЕ БЕЗОПАСНОСТИ)
 # ----------------------------------------------------
-# EN: current_user is provided by the JWT dependency
-# RU: current_user предоставляется JWT зависимостью
 def get_context(
     session: AsyncSession = Depends(get_session),
     current_user: User = Depends(get_current_user)
@@ -33,6 +31,32 @@ def get_context(
     # EN: The real authenticated user is now passed to the context
     # RU: Реальный аутентифицированный пользователь теперь передается в контекст
     return {"session": session, "user": current_user} 
+
+# ----------------------------------------------------
+# EN: Strawberry Resolver Authorization Decorator (RBAC)
+# RU: Декоратор авторизации для резолверов Strawberry (RBAC)
+# ----------------------------------------------------
+def requires_role_graphql(required_role_name: str):
+    def decorator(func):
+        async def wrapper(*args, info: strawberry.type.Info, **kwargs):
+            user: User = info.context.get("user")
+            
+            # EN: Check if the user is authenticated and has the required role
+            # RU: Проверяем, аутентифицирован ли пользователь и имеет ли требуемую роль
+            if not user or not has_role(user, required_role_name):
+                # EN: Raise 403 Forbidden
+                # RU: Вызываем 403 Forbidden
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN, 
+                    detail=f"Permission denied. Requires role: {required_role_name}"
+                )
+            
+            # EN: If check passes, execute the original resolver function
+            # RU: Если проверка пройдена, выполняем оригинальную функцию резолвера
+            return await func(*args, info=info, **kwargs)
+        return wrapper
+    return decorator
+
 
 # ----------------------------------------------------
 # EN: Input Model for Repair Creation (DTO with Validation)
@@ -45,7 +69,7 @@ class RepairCreateInput(BaseModel):
     started_at: datetime
     finished_at: Optional[datetime] = None
 
-    # EN: Business logic validation: finished time must be after start time
+    # EN: Business logic validation: finished time must be strictly after start time
     # RU: Валидация бизнес-логики: время окончания должно быть строго после времени начала
     @field_validator('finished_at')
     @classmethod
@@ -82,20 +106,17 @@ class RepairType:
     started_at: datetime
     finished_at: Optional[datetime] = None
     created_by: int
-    is_deleted: bool # EN: Added soft delete flag
+    is_deleted: bool 
 
 # --------------------
-# EN: GraphQL Queries (Requires Authentication)
+# EN: GraphQL Queries (Protected by context_getter)
 # --------------------
 
 @strawberry.type
 class Query:
     @strawberry.field
     async def lines(self, info) -> List[LineType]:
-        # EN: Authentication is now implicitly required by the context_getter
-        # RU: Аутентификация теперь неявно требуется через context_getter
         session: AsyncSession = info.context["session"]
-        
         # EN: Only select active (non-deleted) lines
         # RU: Выбираем только активные (не удаленные) линии
         res = await session.execute(select(Line).where(Line.is_deleted == False))
@@ -110,18 +131,16 @@ class Query:
         return [MachineType(id=m.id, asset=m.asset, line_id=m.line_id, is_deleted=m.is_deleted) for m in res.scalars().all()]
 
 # --------------------
-# EN: GraphQL Mutations (Core MVP Functionality)
+# EN: GraphQL Mutations (Protected by RBAC)
 # --------------------
 
 @strawberry.type
 class Mutation:
+    @requires_role_graphql("Admin") # <-- RBAC: Только Admin может создавать линии
     @strawberry.mutation
     async def create_line(self, info, name: str) -> LineType:
         session: AsyncSession = info.context["session"]
-        user: User = info.context["user"] # EN: User is guaranteed to exist now (from context)
-        
-        # ⚠️ EN: RBAC CHECK (Future implementation needed, e.g., only Admins can create lines)
-        # ⚠️ RU: ПРОВЕРКА RBAC (Требуется будущая реализация, например, только Админы могут создавать линии)
+        user: User = info.context["user"]
              
         # EN: Core Business Logic: Create new Line
         # RU: Основная Бизнес-логика: Создание новой линии
@@ -144,18 +163,16 @@ class Mutation:
         
         return LineType(id=new_line.id, name=new_line.name, is_deleted=new_line.is_deleted)
 
+    @requires_role_graphql("Technician") # <-- RBAC: Только Technician может создавать ремонты
     @strawberry.mutation
     async def create_repair(self, info, data: RepairCreateInput) -> RepairType:
         session: AsyncSession = info.context["session"]
-        user: User = info.context["user"] # EN: User is guaranteed to exist now (from context)
-
-        # ⚠️ EN: RBAC CHECK (Future implementation needed, e.g., only Technicians can create repairs)
-        # ⚠️ RU: ПРОВЕРКА RBAC (Требуется будущая реализация, например, только Техники могут создавать ремонты)
+        user: User = info.context["user"] 
         
         # EN: Core Business Logic: Create new Repair
         # RU: Основная Бизнес-логика: Создание нового Ремонта
         new_repair = Repair(
-            **data.model_dump(), # EN: Use Pydantic's method to convert to dict
+            **data.model_dump(), 
             created_by=user.id
         )
         

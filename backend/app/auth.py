@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 # EN: Added OAuth2PasswordBearer for token scheme definition
+# RU: Добавлен OAuth2PasswordBearer для определения схемы токенов
 from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer 
 from jose import jwt, JWTError
 from passlib.context import CryptContext
@@ -39,7 +40,7 @@ def create_token(sub: str, minutes: int):
 # ----------------------------------------------------
 async def get_current_user(
     session: AsyncSession = Depends(get_session),
-    token: str = Depends(oauth2_scheme) # EN: Get token from header
+    token: str = Depends(oauth2_scheme)
 ) -> User:
     try:
         # EN: Decode JWT using secret and algorithm from settings
@@ -47,8 +48,6 @@ async def get_current_user(
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGO])
         user_id: str = payload.get("sub")
         if user_id is None:
-            # EN: Token payload missing subject
-            # RU: В полезной нагрузке токена отсутствует субъект
             raise HTTPException(status_code=401, detail="Invalid authentication credentials (No subject)")
     except JWTError:
         # EN: Token signature is invalid or token is expired
@@ -61,8 +60,6 @@ async def get_current_user(
     user = user_q.scalar_one_or_none()
     
     if user is None:
-        # EN: User ID in token does not match any user in the database
-        # RU: ID пользователя в токене не соответствует ни одному пользователю в базе данных
         raise HTTPException(status_code=401, detail="User not found")
         
     # EN: Check if the user is active
@@ -70,7 +67,33 @@ async def get_current_user(
     if not user.is_active:
         raise HTTPException(status_code=403, detail="User account is inactive")
         
-    return user # EN: Return the fully authenticated and loaded User object
+    return user 
+
+# ----------------------------------------------------
+# EN: RBAC Helper Functions
+# RU: Вспомогательные функции для RBAC
+# ----------------------------------------------------
+
+# EN: Function to check if a user has a specific role
+# RU: Функция для проверки наличия определенной роли у пользователя
+def has_role(user: User, required_role_name: str) -> bool:
+    # EN: Roles list is pre-fetched on user load
+    # RU: Список ролей предварительно загружается при получении пользователя
+    return any(role.name == required_role_name for role in user.roles)
+
+# EN: Dependency to enforce a role check for FastAPI endpoints
+# RU: Зависимость для принудительной проверки роли для эндпоинтов FastAPI
+def RequiresRole(required_role_name: str):
+    async def role_checker(current_user: User = Depends(get_current_user)):
+        # EN: If user does not have the required role, raise 403 Forbidden
+        # RU: Если у пользователя нет требуемой роли, вызываем 403 Forbidden
+        if not has_role(current_user, required_role_name):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"User does not have the required role: {required_role_name}"
+            )
+        return current_user
+    return role_checker
 
 @router.post("/login")
 async def login(form: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_session)):
@@ -85,6 +108,7 @@ async def login(form: OAuth2PasswordRequestForm = Depends(), session: AsyncSessi
 @router.post("/refresh")
 async def refresh(token: str):
     # ⚠️ EN: NO TOKEN REVOCATION CHECK IS PERFORMED YET! (Critical future fix)
+    # ⚠️ RU: ПРОВЕРКА ОТЗЫВА ТОКЕНА ЕЩЕ НЕ ВЫПОЛНЯЕТСЯ! (Критический будущий фикс)
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGO])
         sub = payload.get("sub")
