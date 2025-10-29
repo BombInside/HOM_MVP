@@ -120,8 +120,11 @@ jobs:
 
             echo ">>> Deploying docker-compose.stage.yml..."
             
-            # 💡 ФИКС: Используем docker-compose (V1) с флагом --env-file для корректной подстановки IMAGE_VAR
-            docker-compose --env-file stage.env -f docker-compose.stage.yml pull
-            docker-compose --env-file stage.env -f docker-compose.stage.yml up -d --force-recreate
+            # 💡 КРИТИЧЕСКИЙ ФИКС: Загружаем переменные в окружение Bash
+            source stage.env 
+            
+            # 💡 ИСПОЛЬЗУЕМ V2 СИНТАКСИС (docker compose)
+            docker compose -f docker-compose.stage.yml pull
+            docker compose -f docker-compose.stage.yml up -d --force-recreate
 
             echo "✅ Deployment to Droplet finished successfully."
