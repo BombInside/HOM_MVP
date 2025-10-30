@@ -1,8 +1,23 @@
-FROM node:20-slim
+# ==============================
+# ⚡ FRONTEND DOCKERFILE
+# ==============================
+
+# 1️⃣ Базовый образ
+FROM node:20-alpine AS build
+
+# 2️⃣ Рабочая директория
 WORKDIR /app
-COPY package.json package-lock.json* ./
-RUN npm install
+
+# 3️⃣ Копируем package.json и package-lock.json
+COPY package*.json ./
+
+# 4️⃣ Устанавливаем зависимости, включая framer-motion
+RUN npm install --legacy-peer-deps && \
+    npm install framer-motion
+
+# 5️⃣ Копируем исходники проекта
 COPY . .
-ENV VITE_API_URL=http://localhost:8000
+
+# 6️⃣ Запускаем dev-сервер через Vite
 EXPOSE 5173
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]

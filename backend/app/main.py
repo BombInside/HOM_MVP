@@ -1,25 +1,85 @@
-from fastapi import FastAPI
+import asyncio
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from .config import settings
-from .auth import router as auth_router
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
+
+from .db import async_session
 from .graphql.schema import graphql_app
-from .error_middleware import json_error_middleware
-app.middleware("http")(json_error_middleware)
+from .auth import router as auth_router
 
-app = FastAPI(title="H.O.M API", version="0.1.0")
 
-origins = [o.strip() for o in settings.cors_origins.split(",")]
+# ----------------------------------------------------
+# 🧩 Инициализация приложения
+# ----------------------------------------------------
+app = FastAPI(title="HOM Backend API", version="1.0")
+
+# ----------------------------------------------------
+# 🌍 CORS (Frontend <-> Backend)
+# ----------------------------------------------------
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],  # в dev-режиме можно оставить '*'
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
 
-app.include_router(auth_router)
-app.include_router(graphql_app, prefix="/graphql")
+# ----------------------------------------------------
+# ⚙️ Middleware для обработки ошибок (универсальный JSON)
+# ----------------------------------------------------
+@app.middleware("http")
+async def json_error_middleware(request: Request, call_next):
+    try:
+        return await call_next(request)
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+
+# ----------------------------------------------------
+# 🔌 Health-check endpoints
+# ----------------------------------------------------
+
+@app.get("/health")
+async def health_check():
+    """Проверка, что backend жив"""
+    return {"status": "ok", "service": "backend"}
+
+
+@app.get("/api/ping")
+async def api_ping():
+    """Проверка REST API"""
+    return {"message": "pong"}
+
+
+@app.get("/db-check")
+async def db_check():
+    """Проверка соединения с базой данных"""
+    try:
+        async with async_session() as session:  # type: AsyncSession
+            await session.execute(text("SELECT 1"))
+        return {"status": "ok", "database": "connected"}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"status": "error", "detail": str(e)})
+
+
+# ----------------------------------------------------
+# 🔐 Auth router (если реализован)
+# ----------------------------------------------------
+app.include_router(auth_router, prefix="/auth", tags=["Auth"])
+
+
+# ----------------------------------------------------
+# 🔮 GraphQL endpoint
+# ----------------------------------------------------
+app.mount("/graphql", graphql_app)
+
+
+# ----------------------------------------------------
+# 🏁 Root redirect
+# ----------------------------------------------------
+@app.get("/")
+async def root():
+    return {"message": "HOM Backend is running", "graphql": "/graphql"}

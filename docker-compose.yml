@@ -1,54 +1,81 @@
 services:
-  # 💡 ИСПРАВЛЕНИЕ: Замена CockroachDB на PostgreSQL
-  postgres: # <-- Смена имени сервиса
+  # 💾 PostgreSQL
+  postgres:
     image: postgres:15-alpine
+    container_name: hom_postgres
     environment:
       POSTGRES_USER: hom_user
       POSTGRES_PASSWORD: hom_pass
       POSTGRES_DB: hom_db
-    ports: ["5432:5432"] # <-- Стандартный порт PG
-    volumes: [ "pg-data:/var/lib/postgresql/data" ] # <-- Новый том данных
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hom_user -d hom_db"] # <-- Проверка статуса PG
+      test: ["CMD-SHELL", "pg_isready -U hom_user -d hom_db"]
       interval: 5s
       timeout: 3s
       retries: 5
 
-  redis: 
+  # ⚙️ Redis
+  redis:
     image: redis:7.2-alpine
+    container_name: hom_redis
     command: redis-server --appendonly yes
-    ports: ["6379:6379"]
-    volumes: ["redis-data:/data"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 1s
+      interval: 3s
       timeout: 3s
       retries: 5
 
+  # 🐍 Backend (FastAPI + Alembic)
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: hom_backend
     depends_on:
-      postgres: # <-- ИЗМЕНЕНИЕ ЗАВИСИМОСТИ
+      postgres:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     environment:
-      - APP_ENV=dev
-      # 💡 ИЗМЕНЕНИЕ: DB_URL теперь ссылается на сервис 'postgres'
-      - DB_URL=postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db 
-      - JWT_SECRET=dev-secret-change-me
-      - JWT_EXPIRE_MIN=60
-      - CORS_ORIGINS=http://localhost:5173
-      - REDIS_URL=redis://redis:6379
-    ports: ["8000:8000"]
+      APP_ENV: dev
+      DB_URL: postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db
+      JWT_SECRET: dev-secret-change-me
+      JWT_EXPIRE_MIN: 60
+      CORS_ORIGINS: http://localhost:5173
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    command: ["/entrypoint.sh"]
 
+  # 💻 Frontend (Vite + React)
   frontend:
-    build: ./frontend
-    depends_on: [ backend ]
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: hom_frontend
+    depends_on:
+      - backend
     environment:
       - VITE_API_URL=http://localhost:8000
-    ports: ["5173:5173"]
+      - NODE_ENV=development
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/usr/src/app
+      - /usr/src/app/node_modules
+    working_dir: /usr/src/app
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
+# 💾 Определение всех именованных томов
 volumes:
-  pg-data: # <-- НОВЫЙ ТОМ
+  pg-data:
   redis-data:

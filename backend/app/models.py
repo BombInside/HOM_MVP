@@ -3,25 +3,25 @@ from typing import Optional, List
 from sqlmodel import SQLModel, Field, Relationship, Column, JSON
 
 
+class UserRoleLink(SQLModel, table=True):
+    user_id: Optional[int] = Field(default=None, foreign_key="user.id", primary_key=True)
+    role_id: Optional[int] = Field(default=None, foreign_key="role.id", primary_key=True)
+
+
 class Role(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     description: Optional[str] = None
 
-    users: List["User"] = Relationship(back_populates="roles", link_model=lambda: UserRoleLink)
-
-
-class UserRoleLink(SQLModel, table=True):
-    user_id: int = Field(foreign_key="user.id", primary_key=True)
-    role_id: int = Field(foreign_key="role.id", primary_key=True)
+    users: List["User"] = Relationship(back_populates="roles", link_model=UserRoleLink)
 
 
 class User(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     hashed_password: str
-    is_active: bool = True
-    created_at: datetime = Field(default_factory=datetime.utcnow, index=True)
+    is_active: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
     roles: List[Role] = Relationship(back_populates="users", link_model=UserRoleLink)
 
