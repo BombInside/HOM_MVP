@@ -1,0 +1,84 @@
+name: CI/CD Deploy to Droplet
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/hom-backend
+  IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/hom-frontend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USER }}
+          password: ${{ secrets.GHCR_PAT }}
+
+      # ===== FRONTEND build & push (Nginx) =====
+      - name: Build & push Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ env.IMAGE_FRONTEND }}:latest
+            ${{ env.IMAGE_FRONTEND }}:${{ github.sha }}
+
+      # ===== BACKEND build & push (FastAPI) =====
+      - name: Build & push Backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ env.IMAGE_BACKEND }}:latest
+            ${{ env.IMAGE_BACKEND }}:${{ github.sha }}
+
+      # ===== DEPLOY over SSH =====
+      - name: Deploy on Droplet via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DO_HOST }}
+          username: ${{ secrets.DO_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            set -e
+            # подготовка папки
+            mkdir -p ~/app
+            cd ~/app
+
+            # если репо уже есть — обновим, иначе клонируем
+            if [ -d .git ]; then
+              git fetch --all --prune
+            else
+              git clone https://github.com/${{ github.repository }} .
+            fi
+
+            # синхронизируемся на тот же коммит, что собран
+            git reset --hard ${{ github.sha }}
+
+            # логин в GHCR чтобы docker compose мог тянуть приватные образы
+            echo ${{ secrets.GHCR_PAT }} | docker login ghcr.io -u ${{ secrets.GHCR_USER }} --password-stdin
+
+            # подтянуть и поднять
+            docker compose -f docker-compose.prod.yml --env-file .env.prod pull
+            docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --remove-orphans
+
+            # небольшой пруф жизни
+            docker ps
