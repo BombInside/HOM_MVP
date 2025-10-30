@@ -1,0 +1,43 @@
+yaml
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: hom_user
+      POSTGRES_PASSWORD: hom_pass
+      POSTGRES_DB: hom_db
+    volumes: ["pg-data:/var/lib/postgresql/data"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hom_user -d hom_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    command: redis-server --appendonly yes
+    volumes: ["redis-data:/data"]
+    restart: unless-stopped
+
+  backend:
+    image: ${BACKEND_IMAGE}
+    env_file: stage.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    ports: ["8000:8000"]
+    restart: unless-stopped
+
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    env_file: stage.env
+    depends_on: [backend]
+    ports: ["5173:5173"]
+    restart: unless-stopped
+
+volumes:
+  pg-data:
+  redis-data:

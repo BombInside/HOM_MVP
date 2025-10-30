@@ -3,6 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .auth import router as auth_router
 from .graphql.schema import graphql_app
+from .error_middleware import json_error_middleware
+app.middleware("http")(json_error_middleware)
 
 app = FastAPI(title="H.O.M API", version="0.1.0")
 

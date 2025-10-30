@@ -1,168 +1,152 @@
+python
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, status, Header # EN: Added Header for token access
-# EN: Added Redis for revocation list
-# RU: Добавлен Redis для списка отзыва
+from typing import Optional, Tuple
+import uuid
+
 import redis
-import json
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer 
+from fastapi import APIRouter, Depends, HTTPException, status, Header
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import jwt, JWTError
 from passlib.context import CryptContext
-from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+
 from .config import settings
 from .db import async_session
 from .models import User
 
 router = APIRouter(prefix="/auth", tags=["auth"])
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 ALGO = "HS256"
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login") 
+_redis = redis.Redis.from_url(settings.redis_url, decode_responses=True)
 
-# ----------------------------------------------------
-# EN: Redis client setup for Token Revocation List
-# RU: Настройка клиента Redis для Списка Отзыва Токенов
-# ----------------------------------------------------
-# EN: Use decode_responses=True to get strings instead of bytes
-# RU: Используем decode_responses=True для получения строк вместо байтов
-redis_client = redis.from_url(settings.redis_url, decode_responses=True)
 
-async def get_session() -> AsyncSession:
-    async with async_session() as s:
-        yield s
+# --------------------
+# helpers
+# --------------------
+def _hash_password(password: str) -> str:
+    return pwd_context.hash(password)
 
-def hash_password(p: str) -> str:
-    return pwd_context.hash(p)
 
-def verify_password(plain, hashed) -> bool:
-    return pwd_context.verify(plain, hashed)
+def _verify_password(password: str, hashed: str) -> bool:
+    return pwd_context.verify(password, hashed)
 
-def create_token(sub: str, minutes: int):
-    exp = datetime.now(timezone.utc) + timedelta(minutes=minutes) # EN: Use timezone.utc for consistency
-    to_encode = {"sub": sub, "exp": exp.timestamp()} # EN: Use timestamp for JOSE
-    return jwt.encode(to_encode, settings.jwt_secret, algorithm=ALGO)
 
-# EN: Function to add a token to the blacklist with its remaining expiry time
-# RU: Функция для добавления токена в черный список с оставшимся сроком действия
-def revoke_token(token: str):
+def _ttl_from_exp(exp_ts: int) -> int:
+    now_ts = int(datetime.now(timezone.utc).timestamp())
+    return max(0, exp_ts - now_ts)
+
+
+def _create_token(sub: str, minutes: int, token_type: str) -> str:
+    now = datetime.now(timezone.utc)
+    exp = now + timedelta(minutes=minutes)
+    payload = {
+        "sub": sub,
+        "jti": str(uuid.uuid4()),
+        "type": token_type,
+        "iat": int(now.timestamp()),
+        "exp": int(exp.timestamp()),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=ALGO)
+
+
+def _revoke_jti(jti: str, exp_ts: int) -> None:
+    ttl = _ttl_from_exp(exp_ts)
+    if ttl > 0:
+        _redis.set(f"revoked:{jti}", "1", ex=ttl)
+
+
+def _is_revoked(jti: str) -> bool:
+    return _redis.exists(f"revoked:{jti}") == 1
+
+
+async def _get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
+    result = await session.execute(select(User).where(User.email == email))
+    return result.scalar_one_or_none()
+
+
+def _decode_token(raw_token: str) -> dict:
     try:
-        # EN: Decode without verification to get expiry time
-        # RU: Декодируем без верификации для получения времени истечения
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGO], options={"verify_signature": False})
-        
-        token_id = token # EN: Using the token itself as the ID for simplicity
-        exp_timestamp = payload.get("exp")
-        
-        if exp_timestamp is None:
-            return False # EN: Cannot revoke token without expiry
-            
-        # EN: Calculate time to live (TTL) in seconds
-        # RU: Вычисляем время жизни (TTL) в секундах
-        ttl = max(0, int(exp_timestamp - datetime.now(timezone.utc).timestamp()))
-        
-        if ttl > 0:
-            # EN: Add token ID to Redis blacklist set with the calculated expiry
-            # RU: Добавляем ID токена в черный список Redis с вычисленным сроком истечения
-            redis_client.set(token_id, "revoked", ex=ttl) 
-            return True
-        return False
-    except (JWTError, Exception) as e:
-        print(f"Token revocation error: {e}")
-        return False
+        return jwt.decode(raw_token, settings.jwt_secret, algorithms=[ALGO])
+    except JWTError as e:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from e
 
-# EN: Function to check if a token is in the blacklist
-# RU: Функция для проверки, находится ли токен в черном списке
-def is_token_revoked(token: str) -> bool:
-    return redis_client.exists(token) == 1
 
-# ----------------------------------------------------
-# EN: JWT Dependency with Revocation Check
-# RU: Зависимость JWT с проверкой отзыва
-# ----------------------------------------------------
-async def get_current_user(
-    session: AsyncSession = Depends(get_session),
-    token: str = Depends(oauth2_scheme)
-) -> User:
-    # EN: 💡 CRITICAL: Check if the token is revoked FIRST
-    # RU: 💡 КРИТИЧЕСКИ: Проверяем, отозван ли токен ПЕРВЫМ ДЕЛОМ
-    if is_token_revoked(token):
-        raise HTTPException(status_code=401, detail="Token revoked")
-        
-    try:
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGO])
-        user_id: str = payload.get("sub")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid authentication credentials (No subject)")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid authentication credentials")
+async def _get_current_user_from_token(raw_token: str, session: AsyncSession) -> User:
+    payload = _decode_token(raw_token)
+    jti = payload.get("jti")
+    sub = payload.get("sub")
+    if not jti or not sub or _is_revoked(jti):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token revoked or invalid")
 
-    # EN: Fetch user from DB (code simplified for brevity)
-    # RU: Получаем пользователя из БД (код упрощен для краткости)
-    user_q = await session.execute(select(User).where(User.id == int(user_id)))
-    user = user_q.scalar_one_or_none()
-    
-    if user is None or not user.is_active:
-        raise HTTPException(status_code=401, detail="User not found or inactive")
-        
-    return user 
+    result = await session.execute(select(User).where(User.id == int(sub)))
+    user = result.scalar_one_or_none()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
+    return user
 
-# ... (has_role, RequiresRole remain the same) ...
 
+def _issue_token_pair(user_id: int) -> Tuple[str, str]:
+    access = _create_token(str(user_id), minutes=settings.jwt_expire_min, token_type="access")
+    # refresh usually longer (e.g., 10080 min = 7 days); keep simple via 7x access time if not provided
+    refresh_minutes = max(settings.jwt_expire_min * 7, settings.jwt_expire_min + 1)
+    refresh = _create_token(str(user_id), minutes=refresh_minutes, token_type="refresh")
+    return access, refresh
+
+
+# --------------------
+# endpoints
+# --------------------
 @router.post("/login")
-async def login(form: OAuth2PasswordRequestForm = Depends(), session: AsyncSession = Depends(get_session)):
-    # ... (логика без изменений) ...
-    q = await session.execute(select(User).where(User.email == form.username))
-    user = q.scalar_one_or_none()
-    if not user or not verify_password(form.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-        
-    access = create_token(str(user.id), settings.jwt_expire_min)
-    refresh = create_token(str(user.id), settings.jwt_expire_min * 24)
-    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer"}
+async def login(form: OAuth2PasswordRequestForm = Depends()):
+    async with async_session() as session:
+        user = await _get_user_by_email(session, form.username)
+        if not user or not _verify_password(form.password, user.hashed_password):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        access, refresh = _issue_token_pair(user.id)
+        return {"access_token": access, "refresh_token": refresh, "token_type": "bearer"}
+
 
 @router.post("/refresh")
-async def refresh(token: str = Header(..., alias="Authorization")): # EN: Get token from Authorization header
-    # EN: Strip 'Bearer ' prefix if present
-    # RU: Удаляем префикс 'Bearer ', если он присутствует
-    token = token.replace("Bearer ", "") 
-    
-    # 💡 EN: CRITICAL: Check if the token is revoked
-    # 💡 RU: КРИТИЧЕСКИ: Проверяем, отозван ли токен
-    if is_token_revoked(token):
-        raise HTTPException(status_code=401, detail="Token revoked")
-        
-    try:
-        # EN: Decode to check expiry and subject
-        # RU: Декодируем для проверки срока действия и субъекта
-        payload = jwt.decode(token, settings.jwt_secret, algorithms=[ALGO])
-        sub = payload.get("sub")
-        if not sub:
-            raise ValueError
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
-        
-    # EN: Revoke old token immediately after generating a new one (optional, but good practice)
-    # RU: Отзываем старый токен сразу после генерации нового (опционально, но хорошая практика)
-    revoke_token(token) 
-    
-    return {"access_token": create_token(sub, settings.jwt_expire_min)}
+async def refresh(refresh_token: str = Header(..., alias="X-Refresh-Token")):
+    payload = _decode_token(refresh_token)
+    if payload.get("type") != "refresh":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Not a refresh token")
 
-# ----------------------------------------------------
-# EN: New endpoint for user logout
-# RU: Новый эндпоинт для выхода пользователя
-# ----------------------------------------------------
+    if _is_revoked(payload["jti"]):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token revoked")
+
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+
+    # rotate: revoke old refresh jti and issue a new pair
+    _revoke_jti(payload["jti"], payload["exp"])
+    access, new_refresh = _issue_token_pair(int(user_id))
+    return {"access_token": access, "refresh_token": new_refresh, "token_type": "bearer"}
+
+
 @router.post("/logout")
 async def logout(
-    access_token: str = Header(..., alias="Authorization"),
-    refresh_token: str = Header(..., alias="X-Refresh-Token") # EN: Assuming refresh token is passed in a custom header
+    authorization: str = Header(..., alias="Authorization"),
+    refresh_token: str = Header(..., alias="X-Refresh-Token"),
 ):
-    # EN: Extract raw token string
-    # RU: Извлекаем чистую строку токена
-    access_token = access_token.replace("Bearer ", "")
-    
-    # EN: Revoke both tokens
-    # RU: Отзываем оба токена
-    if not revoke_token(access_token) or not revoke_token(refresh_token):
-        raise HTTPException(status_code=400, detail="One or both tokens could not be revoked.")
-        
-    return {"status": "success", "message": "Logged out successfully"}
+    # Authorization: Bearer <token>
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Bad Authorization header")
+    access_token = authorization.replace("Bearer ", "").strip()
+
+    # revoke both
+    for raw in (access_token, refresh_token):
+        payload = _decode_token(raw)
+        _revoke_jti(payload["jti"], payload["exp"])
+    return {"status": "ok"}
+
+
+# dependency for protected routes
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> User:
+    async with async_session() as session:
+        return await _get_current_user_from_token(token, session)
