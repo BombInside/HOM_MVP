@@ -83,3 +83,16 @@ app.mount("/graphql", graphql_app)
 @app.get("/")
 async def root():
     return {"message": "HOM Backend is running", "graphql": "/graphql"}
+
+# ----------------------------------------------------
+# 🧪 Redis health check
+# ----------------------------------------------------
+
+@app.get("/redis-health")
+async def redis_health():
+    try:
+        r = redis.from_url("redis://redis:6379", decode_responses=True)
+        pong = await r.ping()
+        return {"status": "ok" if pong else "offline"}
+    except Exception as e:
+        return {"status": "offline", "error": str(e)}

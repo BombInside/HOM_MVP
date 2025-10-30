@@ -56,17 +56,18 @@ services:
       - ./backend:/app
     command: ["/entrypoint.sh"]
 
-  # 💻 Frontend (Vite + React)
+  # 💻 Frontend (React + Vite)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: hom_frontend
     depends_on:
-      - backend
+      backend:
+        condition: service_started
     environment:
-      - VITE_API_URL=http://localhost:8000
-      - NODE_ENV=development
+      VITE_API_URL: http://localhost:8000
+      NODE_ENV: development
     ports:
       - "5173:5173"
     volumes:
@@ -75,7 +76,6 @@ services:
     working_dir: /usr/src/app
     command: ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
 
-# 💾 Определение всех именованных томов
 volumes:
   pg-data:
   redis-data:

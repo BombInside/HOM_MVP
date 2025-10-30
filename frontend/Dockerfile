@@ -1,23 +1,22 @@
-# ==============================
-# ⚡ FRONTEND DOCKERFILE
-# ==============================
+# --- Stage 1: Install dependencies ---
+FROM node:18-alpine AS deps
 
-# 1️⃣ Базовый образ
-FROM node:20-alpine AS build
+WORKDIR /usr/src/app
 
-# 2️⃣ Рабочая директория
-WORKDIR /app
-
-# 3️⃣ Копируем package.json и package-lock.json
+# Устанавливаем vite и зависимости проекта
 COPY package*.json ./
+RUN npm install -g vite && npm install
 
-# 4️⃣ Устанавливаем зависимости, включая framer-motion
-RUN npm install --legacy-peer-deps && \
-    npm install framer-motion
-
-# 5️⃣ Копируем исходники проекта
+# Копируем код приложения
 COPY . .
 
-# 6️⃣ Запускаем dev-сервер через Vite
+# --- Stage 2: Runtime container ---
+FROM node:18-alpine
+
+WORKDIR /usr/src/app
+COPY --from=deps /usr/src/app /usr/src/app
+
 EXPOSE 5173
+
+# Запускаем Vite dev server
 CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
