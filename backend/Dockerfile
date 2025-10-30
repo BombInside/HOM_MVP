@@ -48,13 +48,13 @@ COPY requirements.txt ./requirements.txt
 # RU: Команда для запуска bootstrap, миграции и старта сервера Uvicorn
 CMD bash -c "\
   echo 'Checking DB and Redis readiness...'; \
-  # EN: Loop until both CockroachDB (SQL port 26257) AND Redis (6379) respond to connection attempt \
-  # RU: Цикл, пока CockroachDB (SQL порт 26257) И Redis (6379) не ответят на попытку соединения \
-  while ! nc -z cockroachdb 26257 || ! nc -z redis 6379; do \
-    echo 'Still waiting for DB/Redis...'; \
+  # EN: Loop until both PostgreSQL (SQL port 5432) AND Redis (6379) respond to connection attempt \
+  # RU: Цикл, пока PostgreSQL (SQL порт 5432) И Redis (6379) не ответят на попытку соединения \
+  while ! nc -z postgres 5432 || ! nc -z redis 6379; do \
+    echo 'Still waiting for Postgres/Redis...'; \
     sleep 1; \
   done; \
-  echo 'DB and Redis are ready. Running migrations and starting API.'; \
+  echo 'Postgres and Redis are ready. Running migrations and starting API.'; \
   \
   # EN: Execute startup commands in sequence: bootstrap, migration, API start \
   # RU: Последовательное выполнение: bootstrap, миграция, запуск API \

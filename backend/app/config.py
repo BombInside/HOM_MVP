@@ -5,11 +5,13 @@ from pydantic import Field, ValidationError
 # RU: Определение класса настроек
 class Settings(BaseSettings):
     app_env: str = "dev"
-    db_url: str = "postgresql+asyncpg://root@cockroachdb:26257/hom?sslmode=disable"
+    # EN: Changed to use PostgreSQL service name 'postgres' and port 5432
+    # RU: Изменено на использование имени сервиса PostgreSQL 'postgres' и порта 5432
+    db_url: str = "postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db" 
 
-    #EN: Add Redis URL for caching and tocken revocation
-    #RU: URL Redis для кеширования и отзыва токенов
-    redis_url: str = "redis://localhost:6379"
+    # EN: Add Redis URL for token revocation
+    # RU: URL Redis для отзыва токенов
+    redis_url: str = "redis://redis:6379"
     
     # EN: JWT secret field. We check for a minimum length of 32 characters.
     # RU: Поле JWT секрета. Проверяем минимальную длину в 32 символа.

@@ -1,6 +1,6 @@
 # Bootstrap utility to ensure database exists and seed admin user and roles.
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy import text
+# EN: Removed create_async_engine and text imports (no need to manually create DB)
+# RU: Удалены импорты create_async_engine и text (нет необходимости вручную создавать БД)
 from sqlmodel import select
 import asyncio
 from .config import settings
@@ -8,11 +8,8 @@ from .db import async_session
 from .models import User, Role
 from .auth import hash_password
 
-async def ensure_db_exists():
-    engine_sys = create_async_engine(settings.db_url, echo=False)
-    async with engine_sys.begin() as conn:
-        await conn.execute(text("CREATE DATABASE IF NOT EXISTS hom"))
-    await engine_sys.dispose()
+# 💡 EN: Removed 'async def ensure_db_exists()' as Postgres container creates the DB automatically.
+# 💡 RU: Удалена 'async def ensure_db_exists()', так как контейнер Postgres создает БД автоматически.
 
 async def seed_admin():
     # EN: Only seed admin user and roles in development environment (SECURITY FIX)
@@ -39,7 +36,8 @@ async def seed_admin():
         await session.commit()
 
 async def main():
-    await ensure_db_exists()
+    # EN: Removed call to ensure_db_exists
+    # RU: Удален вызов ensure_db_exists
     await seed_admin()
 
 if __name__ == "__main__":

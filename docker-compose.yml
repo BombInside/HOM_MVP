@@ -1,16 +1,22 @@
 services:
-  cockroachdb:
-    image: cockroachdb/cockroach:v24.2.2
-    command: start-single-node --insecure --http-addr=0.0.0.0:8080 --sql-addr=0.0.0.0:26257
-    ports: ["26257:26257","8080:8080"]
-    volumes: [ "crdb-data:/cockroach/cockroach-data" ]
+  # 💡 ИСПРАВЛЕНИЕ: Замена CockroachDB на PostgreSQL
+  postgres: # <-- Смена имени сервиса
+    image: postgres:15-alpine
+    # EN: Database settings defined in .env file
+    # RU: Настройки базы данных, определенные в .env
+    environment:
+      POSTGRES_USER: hom_user
+      POSTGRES_PASSWORD: hom_pass
+      POSTGRES_DB: hom_db
+    ports: ["5432:5432"] # <-- Стандартный порт PG
+    volumes: [ "pg-data:/var/lib/postgresql/data" ] # <-- Новый том данных
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      test: ["CMD-SHELL", "pg_isready -U hom_user -d hom_db"] # <-- Проверка статуса PG
       interval: 5s
       timeout: 3s
-      retries: 30
+      retries: 5
 
-  redis: # <-- НОВЫЙ СЕРВИС
+  redis: 
     image: redis:7.2-alpine
     command: redis-server --appendonly yes
     ports: ["6379:6379"]
@@ -24,17 +30,18 @@ services:
   backend:
     build: ./backend
     depends_on:
-      cockroachdb:
+      postgres: # <-- ИЗМЕНЕНИЕ ЗАВИСИМОСТИ
         condition: service_healthy
-      redis: # <-- ДОБАВЛЕНИЕ ЗАВИСИМОСТИ
+      redis:
         condition: service_started
     environment:
       - APP_ENV=dev
-      - DB_URL=postgresql+asyncpg://root@cockroachdb:26257/hom?sslmode=disable
+      # 💡 ИЗМЕНЕНИЕ: DB_URL теперь ссылается на сервис 'postgres'
+      - DB_URL=postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db 
       - JWT_SECRET=dev-secret-change-me
       - JWT_EXPIRE_MIN=60
       - CORS_ORIGINS=http://localhost:5173
-      - REDIS_URL=redis://redis:6379 # <-- НОВАЯ ENV-ПЕРЕМЕННАЯ
+      - REDIS_URL=redis://redis:6379
     ports: ["8000:8000"]
 
   frontend:
@@ -45,5 +52,5 @@ services:
     ports: ["5173:5173"]
 
 volumes:
-  crdb-data:
+  pg-data: # <-- НОВЫЙ ТОМ
   redis-data:
