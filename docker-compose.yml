@@ -2,8 +2,6 @@ services:
   # 💡 ИСПРАВЛЕНИЕ: Замена CockroachDB на PostgreSQL
   postgres: # <-- Смена имени сервиса
     image: postgres:15-alpine
-    # EN: Database settings defined in .env file
-    # RU: Настройки базы данных, определенные в .env
     environment:
       POSTGRES_USER: hom_user
       POSTGRES_PASSWORD: hom_pass
