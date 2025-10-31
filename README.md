@@ -131,4 +131,4 @@ The deployment is triggered automatically upon merging changes into the `main` b
     * The deployment script (or a separate service in `docker-compose.stage.yml`) ensures that **Alembic migrations** are run automatically and successfully **before** the main API service starts.
 
 ---
-Made with ❤️ by Valerii Semenov
+Made with ❤️ by Valerii Semenov(c)
