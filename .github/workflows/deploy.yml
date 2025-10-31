@@ -23,7 +23,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
 
-      # --- Проверка, что все нужные GitHub Secrets заданы ---
+      # --- Проверка секретов ---
       - name: Validate required GitHub Secrets
         env:
           DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
@@ -43,7 +43,7 @@ jobs:
           done
           echo "✅ All required secrets are present."
 
-      # --- Проверка значений .env.stage перед деплоем ---
+      # --- Проверка .env.stage ---
       - name: Validate .env.stage content
         env:
           DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
@@ -53,7 +53,6 @@ jobs:
           echo "Validating .env.stage..."
           echo "CORS_ORIGINS=$CORS_ORIGINS_STAGE"
           
-          # Проверяем, что переменные не пусты
           if [ -z "$DB_URL_STAGE" ]; then
             echo "❌ DB_URL_STAGE is empty!"
             exit 1
@@ -66,16 +65,13 @@ jobs:
             echo "❌ CORS_ORIGINS_STAGE is empty!"
             exit 1
           fi
-
-          # Проверяем корректность формата CORS_ORIGINS
           if ! echo "$CORS_ORIGINS_STAGE" | grep -E '^(\[|http)'; then
             echo "❌ Invalid CORS_ORIGINS_STAGE format. Should be JSON or URL."
             exit 1
           fi
-
           echo "✅ .env.stage variables look good."
 
-      # --- Загрузка кода на сервер ---
+      # --- Загрузка проекта на сервер ---
       - name: Push repo to droplet
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
@@ -86,7 +82,7 @@ jobs:
             --exclude "node_modules" \
             ./ "deployer@$REMOTE_HOST:/home/deployer/dev/hom_mvp"
 
-      # --- Создание/обновление .env.stage на сервере ---
+      # --- Создание .env.stage на сервере ---
       - name: Write .env.stage on server
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
@@ -109,7 +105,7 @@ jobs:
             echo '✅ .env.stage created successfully'
           "
 
-      # --- Пересборка и запуск Docker Compose ---
+      # --- Пересборка и деплой ---
       - name: Compose up (stage)
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
