@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import hash_password
@@ -10,17 +10,17 @@ from .models import Role, User
 
 
 async def ensure_admin_user(session: AsyncSession) -> None:
-    """Инициализация базовых ролей и администратора (безопасно вызывать многократно)."""
-    # Роли
-    existing_roles = {r.name for r in (await session.execute(select(Role))).scalars().all()}
+    """Creates default roles and admin if missing"""
+    result = await session.execute(cast(Any, select(Role)))
+    existing_roles = {r.name for r in result.scalars().all()}
+
     needed = {"Admin", "Technician"}
     for name in needed - existing_roles:
         session.add(Role(name=name))
-
     await session.commit()
 
-    # Пользователь-админ
-    result = await session.execute(select(User).where(User.email == "admin@hom.local"))
+    # Ensure admin user
+    result = await session.execute(select(User).where(and_(User.email == "admin@hom.local")))
     admin: Optional[User] = result.scalars().first()
 
     if not admin:
@@ -33,8 +33,8 @@ async def ensure_admin_user(session: AsyncSession) -> None:
         await session.commit()
         await session.refresh(admin)
 
-    # Привязка роли Admin
-    result = await session.execute(select(Role).where(Role.name == "Admin"))
+    # Assign Admin role
+    result = await session.execute(cast(Any, select(Role).where(and_(Role.name == "Admin"))))
     admin_role = result.scalars().first()
     if admin_role and admin_role not in (admin.roles or []):
         admin.roles = (admin.roles or []) + [admin_role]
