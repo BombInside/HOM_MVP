@@ -74,7 +74,8 @@ class Query:
     @strawberry.field
     async def lines(self, info: Info) -> List[LineType]:
         session: AsyncSession = info.context["session"]
-        res = await session.execute(select(Line).where(Line.is_deleted == False))  # noqa: E712
+        stmt = cast(Any, select(Line).where(Line.is_deleted == False))  # noqa: E712
+        res = await session.execute(stmt)
         return [
             LineType(id=line.id or 0, name=line.name, is_deleted=bool(line.is_deleted))
             for line in res.scalars().all()
@@ -83,7 +84,8 @@ class Query:
     @strawberry.field
     async def machines(self, info: Info) -> List[MachineType]:
         session: AsyncSession = info.context["session"]
-        res = await session.execute(select(Machine).where(Machine.is_deleted == False))  # noqa: E712
+        stmt = cast(Any, select(Machine).where(Machine.is_deleted == False))  # noqa: E712
+        res = await session.execute(stmt)
         return [
             MachineType(
                 id=machine.id or 0,

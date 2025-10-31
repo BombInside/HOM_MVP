@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Optional, cast
 
 from fastapi import Depends, Header, HTTPException, status
 from jose import JWTError, jwt
@@ -51,9 +51,12 @@ async def get_current_user(
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    result = await session.execute(select(User).where(User.id == int(user_id)))
+    # ✅ добавляем cast(Any, ...) чтобы mypy не путал с bool
+    stmt = cast(Any, select(User).where(User.id == int(user_id)))
+    result = await session.execute(stmt)
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     return user
+``
