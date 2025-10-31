@@ -103,8 +103,6 @@ jobs:
             CORS_ORIGINS=${CORS_ORIGINS_STAGE}
             REDIS_URL=redis://redis:6379
             EOT
-
-            echo ✅ .env.stage created successfully
           EOF
 
       # --- Пересборка и деплой ---
