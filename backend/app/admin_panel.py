@@ -9,7 +9,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text, cast, Integer
+from sqlalchemy import select, text, literal_column
 from typing import Optional, Sequence, List, Callable, Awaitable, Any
 import hashlib
 
@@ -251,7 +251,7 @@ async def create_role(
         valid_ids = [int(pid) for pid in permissions if pid]
         if valid_ids:
             res = await session.execute(
-                select(Permission).where(cast(Permission.id, Integer).in_(valid_ids))
+                select(Permission).where(literal_column("permission.id").in_(valid_ids))
             )
             perms: List[Permission] = list(res.scalars().all())
             new_role.permissions = perms
