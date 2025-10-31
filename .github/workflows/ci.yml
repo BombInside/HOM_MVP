@@ -22,20 +22,17 @@ jobs:
           --health-interval 5s
           --health-timeout 3s
           --health-retries 5
-          --name hom_postgres
         ports:
           - 5432:5432
       redis:
         image: redis:7.2-alpine
-        # ❌ ИСПРАВЛЕНО: Убран ключ 'command', аргументы перенесены в 'options'
+        # ✅ ИСПРАВЛЕНО: Используем 'command' для передачи аргументов CMD Redis
+        command: redis-server --appendonly yes 
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 3s
           --health-timeout 3s
           --health-retries 5
-          --name hom_redis
-          # Аргументы для default CMD (redis-server) передаются через options
-          --appendonly yes
         ports:
           - 6379:6379
 
@@ -58,11 +55,9 @@ jobs:
           pip install ruff black mypy pytest pytest-asyncio httpx
 
       - name: 🔬 Ruff (Check Formatting & Linting)
-        # ✅ Только проверка (Check), чтобы CI не менял код
         run: ruff check .
 
       - name: 🎨 Black (Check Formatting)
-        # ✅ Только проверка
         run: black . --check
 
       - name: 📝 Mypy (Static Type Check)
@@ -70,7 +65,6 @@ jobs:
           mypy --ignore-missing-imports .
       
       - name: 🚀 Run Tests (Unit & Integration)
-        # Тесты запускаются после того, как сервисы Postgres и Redis пройдут health-check
         run: |
           pytest
         env:
