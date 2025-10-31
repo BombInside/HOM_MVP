@@ -91,19 +91,19 @@ jobs:
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
         run: |
           echo "📝 Writing .env.stage file on server..."
-          ssh "deployer@$REMOTE_HOST" bash -lc "
+          ssh 'deployer@$REMOTE_HOST' bash -lc '
             set -e
             cd /home/deployer/dev/hom_mvp
-            cat > .env.stage <<EOF
+            cat <<EOF > .env.stage
             APP_ENV=stage
-            DB_URL=${DB_URL_STAGE}
-            JWT_SECRET=${JWT_SECRET_STAGE}
+            DB_URL='"${DB_URL_STAGE}"'
+            JWT_SECRET='"${JWT_SECRET_STAGE}"'
             JWT_EXPIRE_MIN=60
-            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
+            CORS_ORIGINS='"${CORS_ORIGINS_STAGE}"'
             REDIS_URL=redis://redis:6379
             EOF
-            echo '✅ .env.stage created successfully'
-          "
+            echo "✅ .env.stage created successfully"
+          '
 
       # --- Пересборка и деплой ---
       - name: Compose up (stage)
