@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional, List
+from typing import Optional, Sequence
 import hashlib
 
 from app.db import get_session
@@ -21,41 +21,37 @@ def hash_password(password: str) -> str:
 
 
 async def get_current_admin(request: Request, session: AsyncSession) -> Optional[User]:
-    """
-    Возвращает текущего пользователя из cookie-сессии, если он администратор.
-    Совместимо с типами SQLAlchemy и не вызывает mypy-ошибок.
-    """
+    """Возвращает текущего пользователя из cookie-сессии, если он администратор."""
     user_id = request.session.get("user_id")
     if not user_id:
         return None
 
-    res = await session.execute(select(User).where(User.id == user_id))
-    user = res.scalar_one_or_none()
+    result = await session.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
     if not user:
         return None
 
-    roles: List[Role] = getattr(user, "roles", [])
+    roles: Sequence[Role] = getattr(user, "roles", [])
     if any((getattr(r, "name", "") or "").lower() in ("admin", "administrator") for r in roles):
         return user
     return None
 
 
 async def admin_exists(session: AsyncSession) -> bool:
-    """Проверяет, существует ли хотя бы один администратор (без типовых конфликтов)."""
-    # Получаем все роли admin/administrator
-    roles_res = await session.execute(select(Role))
-    roles_all: List[Role] = roles_res.scalars().all()
-    admin_role_ids = [r.id for r in roles_all if (r.name or "").lower() in ("admin", "administrator")]
-    if not admin_role_ids:
+    """Проверяет, существует ли хотя бы один администратор."""
+    result_roles = await session.execute(select(Role))
+    roles_all: Sequence[Role] = result_roles.scalars().all()
+    admin_ids = [r.id for r in roles_all if (r.name or "").lower() in ("admin", "administrator")]
+    if not admin_ids:
         return False
 
-    # Проверяем пользователей с этими ролями
-    users_res = await session.execute(select(User))
-    users_all: List[User] = users_res.scalars().all()
+    result_users = await session.execute(select(User))
+    users_all: Sequence[User] = result_users.scalars().all()
     for user in users_all:
-        roles = getattr(user, "roles", [])
-        if any(r.id in admin_role_ids for r in roles):
-            return True
+        roles: Sequence[Role] = getattr(user, "roles", [])
+        for role in roles:
+            if role.id in admin_ids:
+                return True
     return False
 
 
@@ -76,12 +72,12 @@ async def login_action(
     session: AsyncSession = Depends(get_session),
 ):
     """Авторизация администратора."""
-    res = await session.execute(select(User).where(User.email == email))
-    user = res.scalar_one_or_none()
+    result = await session.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
     if not user or user.hashed_password != hash_password(password):
         return RedirectResponse("/adminpanel/login?err=Неверный+логин+или+пароль", status_code=status.HTTP_303_SEE_OTHER)
 
-    roles: List[Role] = getattr(user, "roles", [])
+    roles: Sequence[Role] = getattr(user, "roles", [])
     if not any((getattr(r, "name", "") or "").lower() in ("admin", "administrator") for r in roles):
         return RedirectResponse("/adminpanel/login?err=Недостаточно+прав", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -124,8 +120,8 @@ async def bootstrap_action(
         return RedirectResponse("/adminpanel/login", status_code=status.HTTP_303_SEE_OTHER)
 
     # Проверяем наличие роли admin
-    role_res = await session.execute(select(Role).where(Role.name == "admin"))
-    role = role_res.scalar_one_or_none()
+    result_role = await session.execute(select(Role).where(Role.name == "admin"))
+    role = result_role.scalar_one_or_none()
     if not role:
         role = Role(name="admin", description="Administrator with full access")
         session.add(role)
