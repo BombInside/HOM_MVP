@@ -4,7 +4,7 @@ from typing import Any, Optional
 
 from fastapi import Depends, Header, HTTPException, status
 from jose import JWTError, jwt
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
@@ -28,6 +28,12 @@ def create_access_token(payload: dict[str, Any]) -> str:
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
+def has_role(user: User, role_name: str) -> bool:
+    """Безопасная проверка роли для SQLAlchemy relationship"""
+    roles = getattr(user, "roles", []) or []
+    return any(getattr(r, "name", None) == role_name for r in roles)
+
+
 async def get_current_user(
     authorization: Optional[str] = Header(default=None),
     session: AsyncSession = Depends(get_session),
@@ -45,7 +51,7 @@ async def get_current_user(
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    result = await session.execute(select(User).where(and_(User.id == int(user_id))))
+    result = await session.execute(select(User).where(User.id == int(user_id)))
     user = result.scalars().first()
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")

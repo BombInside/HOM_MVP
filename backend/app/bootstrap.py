@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Optional, Any, cast
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import hash_password
@@ -22,7 +22,7 @@ async def ensure_admin_user(session: AsyncSession) -> None:
     await session.commit()
 
     # Проверяем наличие пользователя admin
-    result = await session.execute(select(User).where(and_(User.email == "admin@hom.local")))
+    result = await session.execute(select(User).where(User.email == "admin@hom.local"))
     admin: Optional[User] = result.scalars().first()
 
     if not admin:
@@ -36,9 +36,7 @@ async def ensure_admin_user(session: AsyncSession) -> None:
         await session.refresh(admin)
 
     # Привязываем роль Admin
-    result = await session.execute(
-        cast(Any, select(Role).where(and_(Role.name == "Admin")))
-    )
+    result = await session.execute(cast(Any, select(Role).where(Role.name == "Admin")))
     admin_role = result.scalars().first()
     if admin_role and admin_role not in (admin.roles or []):
         admin.roles = (admin.roles or []) + [admin_role]
