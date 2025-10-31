@@ -1,52 +1,135 @@
-from typing import List
+from typing import List, Optional
 import strawberry
 from strawberry.fastapi import GraphQLRouter
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from ..db import get_session
+from sqlmodel import select
+
+from ..db import async_session
 from ..models import Line, Machine
+
+
+# ==========================
+#  Strawberry GraphQL types
+# ==========================
+
+@strawberry.type
+class MachineType:
+    id: int
+    name: str
+    status: Optional[str]
+    created_at: str
 
 
 @strawberry.type
 class LineType:
     id: int
     name: str
-    is_deleted: bool
+    description: Optional[str]
+    created_at: str
+    machines: List[MachineType]
 
 
-@strawberry.type
-class MachineType:
-    id: int
-    asset: str
-    line_id: int
-    is_deleted: bool
+# ==========================
+#  Вспомогательные функции
+# ==========================
 
+async def get_db_session() -> AsyncSession:
+    async with async_session() as session:
+        yield session
+
+
+# ==========================
+#  Query (чтение данных)
+# ==========================
 
 @strawberry.type
 class Query:
     @strawberry.field
     async def lines(self, info) -> List[LineType]:
-        session: AsyncSession = info.context["session"]
-        result = await session.execute(select(Line).where(Line.is_deleted.is_(False)))
-        return [
-            LineType(id=l.id or 0, name=l.name, is_deleted=bool(l.is_deleted))
-            for l in result.scalars().all()
-        ]
+        """Получить список всех линий с машинами."""
+        async with async_session() as session:
+            result = await session.execute(select(Line))
+            lines = result.scalars().unique().all()
+            # Загружаем связанные машины
+            for line in lines:
+                await session.refresh(line)
+            return [
+                LineType(
+                    id=line.id,
+                    name=line.name,
+                    description=line.description,
+                    created_at=line.created_at.isoformat(),
+                    machines=[
+                        MachineType(
+                            id=m.id,
+                            name=m.name,
+                            status=m.status,
+                            created_at=m.created_at.isoformat(),
+                        )
+                        for m in (line.machines or [])
+                    ],
+                )
+                for line in lines
+            ]
 
     @strawberry.field
     async def machines(self, info) -> List[MachineType]:
-        session: AsyncSession = info.context["session"]
-        result = await session.execute(select(Machine).where(Machine.is_deleted.is_(False)))
-        return [
-            MachineType(
-                id=m.id or 0,
-                asset=m.asset,
-                line_id=m.line_id,
-                is_deleted=bool(m.is_deleted),
+        """Получить список всех машин."""
+        async with async_session() as session:
+            result = await session.execute(select(Machine))
+            machines = result.scalars().all()
+            return [
+                MachineType(
+                    id=m.id,
+                    name=m.name,
+                    status=m.status,
+                    created_at=m.created_at.isoformat(),
+                )
+                for m in machines
+            ]
+
+
+# ==========================
+#  Mutation (изменение данных)
+# ==========================
+
+@strawberry.type
+class Mutation:
+    @strawberry.mutation
+    async def create_line(self, name: str, description: Optional[str] = None) -> LineType:
+        """Создать новую производственную линию."""
+        async with async_session() as session:
+            new_line = Line(name=name, description=description)
+            session.add(new_line)
+            await session.commit()
+            await session.refresh(new_line)
+            return LineType(
+                id=new_line.id,
+                name=new_line.name,
+                description=new_line.description,
+                created_at=new_line.created_at.isoformat(),
+                machines=[],
             )
-            for m in result.scalars().all()
-        ]
+
+    @strawberry.mutation
+    async def create_machine(self, line_id: int, name: str, status: Optional[str] = None) -> MachineType:
+        """Создать новую машину и привязать её к линии."""
+        async with async_session() as session:
+            new_machine = Machine(name=name, status=status, line_id=line_id)
+            session.add(new_machine)
+            await session.commit()
+            await session.refresh(new_machine)
+            return MachineType(
+                id=new_machine.id,
+                name=new_machine.name,
+                status=new_machine.status,
+                created_at=new_machine.created_at.isoformat(),
+            )
 
 
-schema = strawberry.Schema(query=Query)
+# ==========================
+#  Создание схемы
+# ==========================
+
+schema = strawberry.Schema(query=Query, mutation=Mutation)
 graphql_app = GraphQLRouter(schema)

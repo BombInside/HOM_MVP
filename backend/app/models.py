@@ -63,34 +63,39 @@ class User(SQLModel, table=True):
 
 
 # ==========================
-#  Модель Machine
-# ==========================
-
-class Machine(SQLModel, table=True):
-    """Оборудование или устройство."""
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, unique=True)
-    status: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-# ==========================
-#  Модель Line (новая)
+#  Модель Line
 # ==========================
 
 class Line(SQLModel, table=True):
     """
-    Производственная линия или поток.
-    Добавлена для совместимости с GraphQL schema.
+    Производственная линия (Line).
+    Связана с машинами: одна линия может включать несколько машин.
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     description: Optional[str] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
+    machines: List["Machine"] = Relationship(back_populates="line")
+
 
 # ==========================
-#  RBACSeed (инициализация ролей)
+#  Модель Machine
+# ==========================
+
+class Machine(SQLModel, table=True):
+    """Оборудование или устройство на линии."""
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)
+    status: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+    line_id: Optional[int] = Field(default=None, foreign_key="line.id")
+    line: Optional[Line] = Relationship(back_populates="machines")
+
+
+# ==========================
+#  Служебный класс RBACSeed
 # ==========================
 
 class RBACSeed:
@@ -147,6 +152,10 @@ class RBACSeed:
         await session.commit()
         print("✅ RBAC роли и разрешения успешно созданы.")
 
+
+# ==========================
+#  Экспорт моделей
+# ==========================
 
 __all__ = [
     "User",
