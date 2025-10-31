@@ -42,7 +42,7 @@ async def admin_exists(session: AsyncSession) -> bool:
     all_users: Sequence[User] = result_users.scalars().all()
     for user in all_users:
         user_roles = getattr(user, "roles", [])
-        if any(r.id in admin_role_ids for r in user_roles if r.id is not None):
+        if any(r.id and r.id in admin_role_ids for r in user_roles):
             return True
     return False
 
@@ -127,7 +127,7 @@ async def bootstrap_action(
         )
 
     # ищем или создаём роль администратора
-    res = await session.execute(select(Role).where(Role.name.in_(["admin", "administrator"])))
+    res = await session.execute(select(Role).where(Role.name.in_(["admin", "administrator"])))  # type: ignore[attr-defined]
     role = res.scalar_one_or_none()
     if not role:
         role = Role(name="admin", description="Administrator with full access")
@@ -247,7 +247,7 @@ async def create_role(
     if permissions:
         valid_ids = [int(pid) for pid in permissions if pid]
         if valid_ids:
-            res = await session.execute(select(Permission).where(Permission.id.in_(valid_ids)))  # type: ignore[arg-type]
+            res = await session.execute(select(Permission).where(Permission.id.in_(valid_ids)))  # type: ignore[arg-type, union-attr]
             perms: List[Permission] = list(res.scalars().all())
             new_role.permissions = perms
     session.add(new_role)
