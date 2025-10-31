@@ -9,7 +9,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, true_
+from sqlalchemy import select, and_, true
 from typing import Optional, Sequence, List, Callable, Awaitable, Any
 import hashlib
 
@@ -128,7 +128,7 @@ async def bootstrap_action(
         )
 
     # ищем или создаём роль администратора
-    condition = and_(true_(), Role.name.in_(["admin", "administrator"]))
+    condition = and_(true(), Role.name.in_(["admin", "administrator"]))
     res = await session.execute(select(Role).where(condition))
     role = res.scalar_one_or_none()
     if not role:
