@@ -246,12 +246,14 @@ async def create_role(
     user: User = Depends(require_permission("manage_roles")),
 ):
     """Создание новой роли и назначение прав."""
+    from sqlalchemy import bindparam
+
     new_role = Role(name=name, description=description)
     if permissions:
         valid_ids = [int(pid) for pid in permissions if pid]
         if valid_ids:
             res = await session.execute(
-                select(Permission).where(literal_column("permission.id").in_(valid_ids))
+                select(Permission).where(Permission.id.in_(bindparam("ids", expanding=True))).params(ids=valid_ids)
             )
             perms: List[Permission] = list(res.scalars().all())
             new_role.permissions = perms
