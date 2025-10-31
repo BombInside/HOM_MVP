@@ -236,6 +236,8 @@ async def new_role_page(
     )
 
 
+from sqlalchemy import cast, Integer
+
 @router.post("/roles/new")
 async def create_role(
     request: Request,
@@ -250,17 +252,14 @@ async def create_role(
     if permissions:
         valid_ids = [int(pid) for pid in permissions if pid]
         if valid_ids:
-            res = await session.execute(
-                select(Permission).where(
-                    Permission.id.is_not(None),
-                    Permission.id.in_(valid_ids),
-                )
-            )
+            condition = cast(Permission.id, Integer).in_(valid_ids)
+            res = await session.execute(select(Permission).where(condition))
             perms: List[Permission] = list(res.scalars().all())
             new_role.permissions = perms
     session.add(new_role)
     await session.commit()
     return RedirectResponse("/adminpanel/roles", status_code=status.HTTP_303_SEE_OTHER)
+
 
 
 # ======================================================
