@@ -28,7 +28,7 @@ jobs:
           rsync -az --delete \
             --exclude ".git" \
             --exclude "node_modules" \
-            ./ "root@$REMOTE_HOST:/opt/hom_mvp"
+            ./ "deployer@$REMOTE_HOST:/opt/hom_mvp"
 
       - name: Write .env.stage on server
         env:
@@ -37,7 +37,7 @@ jobs:
           JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
         run: |
-          ssh "root@$REMOTE_HOST" bash -lc '
+          ssh "deployer@$REMOTE_HOST" bash -lc '
             set -e
             cd /opt/hom_mvp
             cat > .env.stage <<EOF
@@ -54,7 +54,7 @@ jobs:
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
-          ssh "root@$REMOTE_HOST" bash -lc '
+          ssh "deployer@$REMOTE_HOST" bash -lc '
             set -e
             cd /opt/hom_mvp
             docker compose -f docker-compose.stage.yml pull || true
