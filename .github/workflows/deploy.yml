@@ -37,9 +37,10 @@ jobs:
           JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
         run: |
-          ssh "deployer@$REMOTE_HOST" bash -lc '
+          ssh "deployer@$REMOTE_HOST" bash -lc "
             set -e
             cd /home/deployer/dev/hom_mvp
+            echo 'Создаю .env.stage...'
             cat > .env.stage <<EOF
             APP_ENV=stage
             DB_URL=${DB_URL_STAGE}
@@ -48,7 +49,8 @@ jobs:
             CORS_ORIGINS=${CORS_ORIGINS_STAGE}
             REDIS_URL=redis://redis:6379
             EOF
-          '
+            echo '.env.stage создан успешно ✅'
+          "
 
       - name: Compose up (stage)
         env:
