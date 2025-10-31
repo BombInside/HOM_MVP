@@ -127,7 +127,9 @@ async def bootstrap_action(
         )
 
     # ищем или создаём роль администратора
-    res = await session.execute(select(Role).where(Role.name.in_(["admin", "administrator"])))  # type: ignore[attr-defined]
+    res = await session.execute(
+        select(Role).where(Role.name.in_(["admin", "administrator"]))  # type: ignore[arg-type]
+    )
     role = res.scalar_one_or_none()
     if not role:
         role = Role(name="admin", description="Administrator with full access")
@@ -145,6 +147,7 @@ async def bootstrap_action(
         "admin_bootstrap.html",
         {"request": request, "admin_exists": True, "admin_created": True},
     )
+
 
 
 # ======================================================
