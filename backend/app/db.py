@@ -29,11 +29,3 @@ async def create_db_and_tables() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
 
-
-__all__ = [
-    "engine",
-    "async_session",
-    "get_session",
-    "create_db_and_tables",
-    "SQLModel",
-]
