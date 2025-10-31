@@ -67,8 +67,9 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
 
-    # mypy-safe SQLAlchemy select
-    stmt = cast(Any, select(User).where(User.id == literal(int(user_id))))
+    # mypy-safe SQLAlchemy select (avoid "bool" typing confusion)
+    condition = cast(Any, User.id == literal(int(user_id)))
+    stmt = select(User).where(condition)
     result = await session.execute(stmt)
     user = result.scalars().first()
 
