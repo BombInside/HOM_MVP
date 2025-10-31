@@ -51,8 +51,6 @@ jobs:
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
         run: |
           echo "Validating .env.stage..."
-          echo "CORS_ORIGINS=$CORS_ORIGINS_STAGE"
-          
           if [ -z "$DB_URL_STAGE" ]; then
             echo "❌ DB_URL_STAGE is empty!"
             exit 1
@@ -63,10 +61,6 @@ jobs:
           fi
           if [ -z "$CORS_ORIGINS_STAGE" ]; then
             echo "❌ CORS_ORIGINS_STAGE is empty!"
-            exit 1
-          fi
-          if ! echo "$CORS_ORIGINS_STAGE" | grep -E '^(\[|http)'; then
-            echo "❌ Invalid CORS_ORIGINS_STAGE format. Should be JSON or URL."
             exit 1
           fi
           echo "✅ .env.stage variables look good."
@@ -90,21 +84,22 @@ jobs:
           JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
         run: |
-          echo "📝 Writing .env.stage file on server..."
-          ssh "deployer@${REMOTE_HOST}" <<'EOF'
+          echo "📝 Writing .env.stage on server..."
+          ssh -T "deployer@$REMOTE_HOST" <<EOF
             set -e
             cd /home/deployer/dev/hom_mvp
 
+            echo "Creating .env.stage..."
             cat > .env.stage <<EOT
-            APP_ENV=stage
-            DB_URL=${DB_URL_STAGE}
-            JWT_SECRET=${JWT_SECRET_STAGE}
-            JWT_EXPIRE_MIN=60
-            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
-            REDIS_URL=redis://redis:6379
-            EOT
+          APP_ENV=stage
+          DB_URL=$DB_URL_STAGE
+          JWT_SECRET=$JWT_SECRET_STAGE
+          JWT_EXPIRE_MIN=60
+          CORS_ORIGINS=$CORS_ORIGINS_STAGE
+          REDIS_URL=redis://redis:6379
+          EOT
 
-          EOF
+EOF
 
       # --- Проверка и пересборка backend ---
       - name: Ensure backend rebuilt if needed
@@ -116,12 +111,11 @@ jobs:
             set -e
             cd /home/deployer/dev/hom_mvp
 
-            echo "🔎 Checking if backend image exists..."
             if ! docker image inspect hom_mvp-backend >/dev/null 2>&1; then
               echo "❌ Backend image not found. Rebuilding..."
               docker compose -f docker-compose.stage.yml build backend
             else
-              echo "✅ Backend image exists. Checking for code changes..."
+              echo "✅ Backend image exists. Rebuilding with latest changes..."
               docker compose -f docker-compose.stage.yml build backend --pull
             fi
           '
