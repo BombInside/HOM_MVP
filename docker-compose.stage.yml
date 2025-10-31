@@ -1,62 +1,61 @@
+version: "3.9"
+
 services:
   postgres:
-    ports:
-      - 5432:5432
-    image: postgres:15-alpine
+    image: postgres:15
     restart: always
     environment:
-      POSTGRES_USER: hom_user
-      POSTGRES_PASSWORD: hom_pass
-      POSTGRES_DB: hom_db
+      POSTGRES_DB: ${POSTGRES_DB:-hom_db}
+      POSTGRES_USER: ${POSTGRES_USER:-hom_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hom_pass}
+    ports:
+      - "5432:5432"
     volumes:
-      - pg-data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U hom_user -d hom_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hom_user} -d ${POSTGRES_DB:-hom_db}"]
       interval: 5s
-      timeout: 3s
-      retries: 5
+      timeout: 5s
+      retries: 10
 
   redis:
-    image: redis:7.2-alpine
+    image: redis:7
     restart: always
-    command: redis-server --appendonly yes
-    volumes:
-      - redis-data:/data
+    ports:
+      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 3s
-      timeout: 3s
-      retries: 5
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  alembic:
+    build: .
+    command: ["alembic", "upgrade", "head"]
+    environment:
+      - DB_URL=${DB_URL:-postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db}
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    restart: always
-    env_file: .env.stage
+    build: .
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"
     environment:
-      - PYTHONPATH=/app
+      - DB_URL=${DB_URL:-postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db}
+      - REDIS_URL=${REDIS_URL:-redis://redis:6379/0}
+      - JWT_SECRET=${JWT_SECRET:-secret-key}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
-    ports:
-      - "8000:8000"
-    command: ["/entrypoint.sh"]
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile.prod
+      alembic:
+        condition: service_completed_successfully
     restart: always
-    environment:
-      - VITE_API_URL=http://localhost:8000
-    depends_on:
-      - backend
-    ports:
-      - "80:80"
 
 volumes:
-  pg-data:
-  redis-data:
+  postgres_data:

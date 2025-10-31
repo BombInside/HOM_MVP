@@ -26,8 +26,8 @@ app.include_router(admin_router)
 
 
 @app.on_event("startup")
-async def startup():
-    """Создаёт таблицы и инициализирует RBAC при старте."""
+async def startup_event():
+    """Создаёт таблицы и применяет RBAC сид."""
     print("🗄️  Инициализация базы данных...")
     await create_db_and_tables()
 
@@ -39,10 +39,10 @@ async def startup():
         except Exception as e:
             print(f"⚠️ Ошибка при инициализации RBAC: {e}")
 
-    print("✅ Приложение успешно запущено.")
+    print("✅ Приложение готово к работе.")
 
 
 @app.get("/health")
-async def health() -> dict[str, str]:
-    """Проверка состояния приложения."""
+async def health_check():
+    """Проверка состояния API."""
     return {"status": "ok"}
