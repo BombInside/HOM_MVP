@@ -63,10 +63,11 @@ class User(SQLModel, table=True):
 
 
 # ==========================
-#  Пример модели
+#  Модель Machine
 # ==========================
 
 class Machine(SQLModel, table=True):
+    """Оборудование или устройство."""
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     status: Optional[str] = None
@@ -74,25 +75,30 @@ class Machine(SQLModel, table=True):
 
 
 # ==========================
-#  Служебный класс RBACSeed
+#  Модель Line (новая)
+# ==========================
+
+class Line(SQLModel, table=True):
+    """
+    Производственная линия или поток.
+    Добавлена для совместимости с GraphQL schema.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True)
+    description: Optional[str] = None
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# ==========================
+#  RBACSeed (инициализация ролей)
 # ==========================
 
 class RBACSeed:
-    """
-    Служебный класс для начального заполнения ролей и разрешений.
-    Безопасен к повторным вызовам (не создаёт дубликаты).
-    """
-
+    """Создание стандартных ролей и разрешений. Безопасно при повторных вызовах."""
     DEFAULT_ROLES = {
         "admin": {
             "description": "Полный доступ ко всем функциям системы",
-            "permissions": [
-                "manage_users",
-                "manage_roles",
-                "view_dashboard",
-                "edit_settings",
-                "view_logs",
-            ],
+            "permissions": ["manage_users", "manage_roles", "view_dashboard", "edit_settings", "view_logs"],
         },
         "operator": {
             "description": "Управление задачами без доступа к настройкам",
@@ -110,20 +116,16 @@ class RBACSeed:
 
     @classmethod
     async def seed(cls, session) -> None:
-        """Создаёт роли и разрешения, если они ещё не существуют."""
         from sqlalchemy import select
 
-        # Проверяем, есть ли хоть одна роль
         result = await session.execute(select(Role))
         existing_roles = result.scalars().all()
-
         if existing_roles:
             print("🔁 RBAC роли уже существуют, пропускаем инициализацию.")
             return
 
         print("🚀 Создание стандартных ролей и разрешений...")
 
-        # Создаём все уникальные разрешения
         permissions_map: dict[str, Permission] = {}
         for role_data in cls.DEFAULT_ROLES.values():
             for perm_name in role_data["permissions"]:
@@ -134,11 +136,9 @@ class RBACSeed:
 
         await session.commit()
 
-        # Обновляем список разрешений
         result = await session.execute(select(Permission))
         permissions_by_name = {p.name: p for p in result.scalars().all()}
 
-        # Создаём роли
         for role_name, role_data in cls.DEFAULT_ROLES.items():
             role = Role(name=role_name, description=role_data["description"])
             role.permissions = [permissions_by_name[p] for p in role_data["permissions"]]
@@ -153,6 +153,7 @@ __all__ = [
     "Role",
     "Permission",
     "Machine",
+    "Line",
     "UserRoleLink",
     "RolePermissionLink",
     "RBACSeed",
