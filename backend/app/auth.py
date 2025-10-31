@@ -30,9 +30,8 @@ def verify_password(raw: str, hashed: str) -> bool:
 def create_access_token(payload: dict[str, Any], expires_delta: Optional[int] = None) -> str:
     """Создает JWT-токен с опциональным временем жизни."""
     to_encode = payload.copy()
-    expire = datetime.utcnow() + timedelta(
-        minutes=expires_delta or settings.JWT_EXPIRE_MIN
-    )
+    expire_minutes = expires_delta or getattr(settings, "JWT_EXPIRE_MIN", 60)
+    expire = datetime.utcnow() + timedelta(minutes=expire_minutes)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=ALGORITHM)
 
@@ -67,8 +66,8 @@ async def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
         )
 
-    # mypy-friendly SQLAlchemy select
-    stmt = cast(Any, select(User).where(User.id == int(user_id)))
+    # mypy-safe SQLAlchemy select
+    stmt = cast(Any, select(User).where(User.id.is_(int(user_id))))  # type-safe comparison
     result = await session.execute(stmt)
     user = result.scalars().first()
 
