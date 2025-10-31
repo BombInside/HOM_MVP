@@ -1,5 +1,4 @@
 services:
-  # 💾 PostgreSQL
   postgres:
     image: postgres:15-alpine
     container_name: hom_postgres
@@ -7,32 +6,26 @@ services:
       POSTGRES_USER: hom_user
       POSTGRES_PASSWORD: hom_pass
       POSTGRES_DB: hom_db
-    ports:
-      - "5432:5432"
-    volumes:
-      - pg-data:/var/lib/postgresql/data
+    ports: ["5432:5432"]
+    volumes: [ "pg-data:/var/lib/postgresql/data" ]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U hom_user -d hom_db"]
       interval: 5s
       timeout: 3s
       retries: 5
 
-  # ⚙️ Redis
   redis:
     image: redis:7.2-alpine
     container_name: hom_redis
     command: redis-server --appendonly yes
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis-data:/data
+    ports: ["6379:6379"]
+    volumes: [ "redis-data:/data" ]
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 3s
       timeout: 3s
       retries: 5
 
-  # 🐍 Backend (FastAPI + Alembic)
   backend:
     build:
       context: ./backend
@@ -50,26 +43,21 @@ services:
       JWT_EXPIRE_MIN: 60
       CORS_ORIGINS: http://localhost:5173
       REDIS_URL: redis://redis:6379
-    ports:
-      - "8000:8000"
+    ports: ["8000:8000"]
     volumes:
       - ./backend:/app
     command: ["/entrypoint.sh"]
 
-  # 💻 Frontend (React + Vite)
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: hom_frontend
-    depends_on:
-      backend:
-        condition: service_started
+    depends_on: [ backend ]
     environment:
-      VITE_API_URL: http://localhost:8000
-      NODE_ENV: development
-    ports:
-      - "5173:5173"
+      - VITE_API_URL=http://localhost:8000
+      - NODE_ENV=development
+    ports: ["5173:5173"]
     volumes:
       - ./frontend:/usr/src/app
       - /usr/src/app/node_modules

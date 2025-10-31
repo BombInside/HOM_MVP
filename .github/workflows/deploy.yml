@@ -1,0 +1,63 @@
+name: Deploy
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  deploy-stage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
+
+      - name: Push repo to droplet
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude "node_modules" \
+            ./ "root@$REMOTE_HOST:/opt/hom_mvp"
+
+      - name: Write .env.stage on server
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
+          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
+          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
+        run: |
+          ssh "root@$REMOTE_HOST" bash -lc '
+            set -e
+            cd /opt/hom_mvp
+            cat > .env.stage <<EOF
+            APP_ENV=stage
+            DB_URL=${DB_URL_STAGE}
+            JWT_SECRET=${JWT_SECRET_STAGE}
+            JWT_EXPIRE_MIN=60
+            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
+            REDIS_URL=redis://redis:6379
+            EOF
+          '
+
+      - name: Compose up (stage)
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          ssh "root@$REMOTE_HOST" bash -lc '
+            set -e
+            cd /opt/hom_mvp
+            docker compose -f docker-compose.stage.yml pull || true
+            docker compose -f docker-compose.stage.yml up -d --build
+            docker compose -f docker-compose.stage.yml ps
+          '

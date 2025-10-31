@@ -1,98 +1,50 @@
-import asyncio
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Depends
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
+import redis.asyncio as redis
 
-from .db import async_session
+from .error_middleware import json_error_middleware
 from .graphql.schema import graphql_app
-from .auth import router as auth_router
+from .config import get_settings
+from .db import get_session
 
+settings = get_settings()
 
-# ----------------------------------------------------
-# 🧩 Инициализация приложения
-# ----------------------------------------------------
-app = FastAPI(title="HOM Backend API", version="1.0")
+app = FastAPI(title="HOM Backend")
 
-# ----------------------------------------------------
-# 🌍 CORS (Frontend <-> Backend)
-# ----------------------------------------------------
+# error middleware
+app.middleware("http")(json_error_middleware)
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # в dev-режиме можно оставить '*'
+    allow_origins=[settings.CORS_ORIGINS],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-
-# ----------------------------------------------------
-# ⚙️ Middleware для обработки ошибок (универсальный JSON)
-# ----------------------------------------------------
-@app.middleware("http")
-async def json_error_middleware(request: Request, call_next):
-    try:
-        return await call_next(request)
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"error": str(e)})
-
-
-# ----------------------------------------------------
-# 🔌 Health-check endpoints
-# ----------------------------------------------------
+# GraphQL
+app.include_router(graphql_app, prefix="/graphql")
 
 @app.get("/health")
 async def health_check():
-    """Проверка, что backend жив"""
-    return {"status": "ok", "service": "backend"}
+    return {"status": "ok", "env": settings.APP_ENV}
 
-
-@app.get("/api/ping")
-async def api_ping():
-    """Проверка REST API"""
-    return {"message": "pong"}
-
-
-@app.get("/db-check")
-async def db_check():
-    """Проверка соединения с базой данных"""
+@app.get("/db-health")
+async def db_health(session=Depends(get_session)):
     try:
-        async with async_session() as session:  # type: AsyncSession
-            await session.execute(text("SELECT 1"))
-        return {"status": "ok", "database": "connected"}
-    except Exception as e:
-        return JSONResponse(status_code=500, content={"status": "error", "detail": str(e)})
-
-
-# ----------------------------------------------------
-# 🔐 Auth router (если реализован)
-# ----------------------------------------------------
-app.include_router(auth_router, prefix="/auth", tags=["Auth"])
-
-
-# ----------------------------------------------------
-# 🔮 GraphQL endpoint
-# ----------------------------------------------------
-app.mount("/graphql", graphql_app)
-
-
-# ----------------------------------------------------
-# 🏁 Root redirect
-# ----------------------------------------------------
-@app.get("/")
-async def root():
-    return {"message": "HOM Backend is running", "graphql": "/graphql"}
-
-# ----------------------------------------------------
-# 🧪 Redis health check
-# ----------------------------------------------------
+        await session.execute(text("SELECT 1"))
+        return {"status": "ok"}
+    except Exception:
+        return {"status": "error"}
 
 @app.get("/redis-health")
 async def redis_health():
     try:
-        r = redis.from_url("redis://redis:6379", decode_responses=True)
+        r = redis.from_url(settings.REDIS_URL, decode_responses=True)
         pong = await r.ping()
         return {"status": "ok" if pong else "offline"}
-    except Exception as e:
-        return {"status": "offline", "error": str(e)}
+    except Exception:
+        return {"status": "error"}
