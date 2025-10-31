@@ -23,7 +23,7 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
 
-      # --- Проверка секретов ---
+      # --- Проверка обязательных секретов ---
       - name: Validate required GitHub Secrets
         env:
           DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
@@ -31,7 +31,7 @@ jobs:
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
-          echo "Validating secrets..."
+          echo "🔍 Validating required secrets..."
           REQUIRED_VARS=("DB_URL_STAGE" "JWT_SECRET_STAGE" "CORS_ORIGINS_STAGE" "REMOTE_HOST")
           for VAR in "${REQUIRED_VARS[@]}"; do
             VALUE="${!VAR}"
@@ -39,31 +39,9 @@ jobs:
               echo "❌ Missing secret: $VAR"
               exit 1
             fi
-            echo "✅ $VAR present"
+            echo "✅ $VAR is present"
           done
           echo "✅ All required secrets are present."
-
-      # --- Проверка .env.stage ---
-      - name: Validate .env.stage content
-        env:
-          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
-          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
-          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
-        run: |
-          echo "Validating .env.stage..."
-          if [ -z "$DB_URL_STAGE" ]; then
-            echo "❌ DB_URL_STAGE is empty!"
-            exit 1
-          fi
-          if [ -z "$JWT_SECRET_STAGE" ]; then
-            echo "❌ JWT_SECRET_STAGE is empty!"
-            exit 1
-          fi
-          if [ -z "$CORS_ORIGINS_STAGE" ]; then
-            echo "❌ CORS_ORIGINS_STAGE is empty!"
-            exit 1
-          fi
-          echo "✅ .env.stage variables look good."
 
       # --- Загрузка проекта на сервер ---
       - name: Push repo to droplet
@@ -76,51 +54,83 @@ jobs:
             --exclude "node_modules" \
             ./ "deployer@$REMOTE_HOST:/home/deployer/dev/hom_mvp"
 
-      # --- Создание .env.stage на сервере ---
-      - name: Write .env.stage on server
+      # --- Создание .env.stage для backend и frontend ---
+      - name: Write .env.stage files on server
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
           DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
           JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
         run: |
-          echo "📝 Writing .env.stage on server..."
-          ssh -T "deployer@$REMOTE_HOST" <<EOF
+          echo "📝 Writing .env.stage for backend and frontend..."
+          ssh "deployer@${REMOTE_HOST}" bash -lc '
             set -e
             cd /home/deployer/dev/hom_mvp
 
-            echo "Creating .env.stage..."
+            # --- Backend .env.stage ---
             cat > .env.stage <<EOT
             APP_ENV=stage
-            DB_URL=$DB_URL_STAGE
-            JWT_SECRET=$JWT_SECRET_STAGE
+            DB_URL=${DB_URL_STAGE}
+            JWT_SECRET=${JWT_SECRET_STAGE}
             JWT_EXPIRE_MIN=60
-            CORS_ORIGINS=$CORS_ORIGINS_STAGE
+            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
             REDIS_URL=redis://redis:6379
             EOT
 
-            EOF
+            # --- Frontend .env.stage ---
+            mkdir -p frontend
+            cat > frontend/.env.stage <<EOT
+            VITE_API_URL=${CORS_ORIGINS_STAGE}
+            VITE_APP_ENV=stage
+            EOT
+
+            echo "✅ Environment files created."
+            echo "------------------------------------"
+            echo "Backend .env.stage:"
+            cat .env.stage | sed 's/\(JWT_SECRET=\).*/\1[REDACTED]/'
+            echo "------------------------------------"
+            echo "Frontend .env.stage:"
+            cat frontend/.env.stage
+            echo "------------------------------------"
+          '
 
       # --- Проверка и пересборка backend ---
       - name: Ensure backend rebuilt if needed
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
-          echo "🔍 Checking backend build state..."
+          echo "🔍 Checking backend image..."
           ssh "deployer@${REMOTE_HOST}" bash -lc '
             set -e
             cd /home/deployer/dev/hom_mvp
-
             if ! docker image inspect hom_mvp-backend >/dev/null 2>&1; then
-              echo "❌ Backend image not found. Rebuilding..."
+              echo "❌ Backend image not found, building..."
               docker compose -f docker-compose.stage.yml build backend
             else
-              echo "✅ Backend image exists. Rebuilding with latest changes..."
+              echo "✅ Backend image exists, rebuilding to ensure up-to-date code..."
               docker compose -f docker-compose.stage.yml build backend --pull
             fi
           '
 
-      # --- Пересборка и деплой ---
+      # --- Проверка и пересборка frontend ---
+      - name: Ensure frontend rebuilt if needed
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          echo "🔍 Checking frontend image..."
+          ssh "deployer@${REMOTE_HOST}" bash -lc '
+            set -e
+            cd /home/deployer/dev/hom_mvp
+            if ! docker image inspect hom_mvp-frontend >/dev/null 2>&1; then
+              echo "❌ Frontend image not found, building..."
+              docker compose -f docker-compose.stage.yml build frontend
+            else
+              echo "✅ Frontend image exists, rebuilding to include updated env..."
+              docker compose -f docker-compose.stage.yml build frontend --pull
+            fi
+          '
+
+      # --- Финальный деплой ---
       - name: Compose up (stage)
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
