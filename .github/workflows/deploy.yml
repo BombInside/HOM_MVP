@@ -83,15 +83,6 @@ jobs:
             VITE_API_URL=${CORS_ORIGINS_STAGE}
             VITE_APP_ENV=stage
             EOT
-
-            echo "✅ Environment files created."
-            echo "------------------------------------"
-            echo "Backend .env.stage:"
-            cat .env.stage | sed "s/\(JWT_SECRET=\).*/\1[REDACTED]/"
-            echo "------------------------------------"
-            echo "Frontend .env.stage:"
-            cat frontend/.env.stage
-            echo "------------------------------------"
           '
 
       # --- Проверка и пересборка backend ---
