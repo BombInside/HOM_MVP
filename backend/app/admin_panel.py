@@ -9,12 +9,13 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, text
 from typing import Optional, Sequence, List, Callable, Awaitable, Any
 import hashlib
 
 from app.db import get_session
 from app.models import User, Role, Permission, RBACSeed
+
 
 router = APIRouter(prefix="/adminpanel", tags=["Admin Panel"])
 templates = Jinja2Templates(directory="app/templates")
@@ -25,7 +26,7 @@ templates = Jinja2Templates(directory="app/templates")
 # ======================================================
 
 def hash_password(password: str) -> str:
-    """Хеширование пароля (демо-версия)."""
+    """Хеширование пароля (демо-версия, заменить на bcrypt/argon2 в продакшене)."""
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
@@ -128,7 +129,7 @@ async def bootstrap_action(
 
     # ищем или создаём роль администратора
     res = await session.execute(
-        select(Role).where(getattr(Role, "name").in_(["admin", "administrator"]))  # type: ignore[attr-defined, arg-type, call-overload]
+        select(Role).where(text("name IN ('admin', 'administrator')"))  # type: ignore[arg-type]
     )
     role = res.scalar_one_or_none()
     if not role:
