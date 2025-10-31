@@ -250,8 +250,9 @@ async def create_role(
     if permissions:
         valid_ids = [int(pid) for pid in permissions if pid]
         if valid_ids:
+            ids_str = ",".join(str(v) for v in valid_ids)
             res = await session.execute(
-                select(Permission).where(Permission.id.in_(valid_ids))  # type: ignore[arg-type, union-attr, call-overload]
+                select(Permission).where(text(f"id IN ({ids_str})"))  # type: ignore[arg-type]
             )
             perms: List[Permission] = list(res.scalars().all())
             new_role.permissions = perms
