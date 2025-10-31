@@ -1,4 +1,3 @@
-from typing import Any, Coroutine
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
@@ -8,7 +7,7 @@ from app.config import settings
 try:
     from app.db import create_db_and_tables
 except ImportError:
-    async def create_db_and_tables() -> Coroutine[Any, Any, None]:
+    async def create_db_and_tables() -> None:
         """
         Заглушка для create_db_and_tables, если модуль app.db недоступен.
         Используется для корректной проверки типов (mypy).
