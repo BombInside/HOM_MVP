@@ -71,13 +71,13 @@ class User(SQLModel, table=True):
 
 
 # ==========================
-#  Пример дополнительной модели (для контекста)
+#  Модель Machine (пример)
 # ==========================
 
 class Machine(SQLModel, table=True):
     """
-    Пример вспомогательной модели (если есть в проекте).
-    Используется, чтобы показать, как RBAC может управлять доступом к сущностям.
+    Пример вспомогательной модели.
+    Используется для управления оборудованием.
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
@@ -85,14 +85,18 @@ class Machine(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+# ==========================
+#  Модель Line (новая)
+# ==========================
+
 class Line(SQLModel, table=True):
     """
-    Модель производственной линии (Line).
-    Используется в GraphQL и для управления оборудованием.
+    Производственная линия (используется в GraphQL и админке).
     """
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True, nullable=False)
     description: Optional[str] = Field(default=None)
+    created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
 # ==========================
@@ -147,14 +151,14 @@ class RBACSeed:
         Автоматическое заполнение ролей и разрешений при первом запуске.
         """
         from sqlalchemy import select
+        # 🔧 Исправленный импорт — теперь Role и Permission определены
+        from app.models import Role, Permission
 
         result = await session.execute(select(Role))
         existing_roles = result.scalars().all()
 
         # если таблица ролей пуста — создаём стандартные
         if not existing_roles:
-            from app.models import Role, Permission, RolePermissionLink
-
             all_permissions: dict[str, Permission] = {}
 
             # создаём все permissions
@@ -190,9 +194,8 @@ __all__ = [
     "Role",
     "Permission",
     "Machine",
+    "Line",
     "UserRoleLink",
     "RolePermissionLink",
     "RBACSeed",
-    "Line",
 ]
-
