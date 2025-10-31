@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional, Any
+from typing import Optional, Any, cast
 
 from sqlalchemy import select, and_
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,15 +11,17 @@ from .models import Role, User
 
 async def ensure_admin_user(session: AsyncSession) -> None:
     """Creates default roles and admin if missing"""
+    # Получаем все роли
     result = await session.execute(cast(Any, select(Role)))
     existing_roles = {r.name for r in result.scalars().all()}
 
+    # Создаём недостающие
     needed = {"Admin", "Technician"}
     for name in needed - existing_roles:
         session.add(Role(name=name))
     await session.commit()
 
-    # Ensure admin user
+    # Проверяем наличие пользователя admin
     result = await session.execute(select(User).where(and_(User.email == "admin@hom.local")))
     admin: Optional[User] = result.scalars().first()
 
@@ -33,8 +35,10 @@ async def ensure_admin_user(session: AsyncSession) -> None:
         await session.commit()
         await session.refresh(admin)
 
-    # Assign Admin role
-    result = await session.execute(cast(Any, select(Role).where(and_(Role.name == "Admin"))))
+    # Привязываем роль Admin
+    result = await session.execute(
+        cast(Any, select(Role).where(and_(Role.name == "Admin")))
+    )
     admin_role = result.scalars().first()
     if admin_role and admin_role not in (admin.roles or []):
         admin.roles = (admin.roles or []) + [admin_role]

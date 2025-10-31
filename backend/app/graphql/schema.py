@@ -76,8 +76,8 @@ class Query:
         session: AsyncSession = info.context["session"]
         res = await session.execute(select(Line).where(Line.is_deleted.is_(False)))
         return [
-            LineType(id=l.id or 0, name=l.name, is_deleted=bool(l.is_deleted))
-            for l in res.scalars().all()
+            LineType(id=line.id or 0, name=line.name, is_deleted=bool(line.is_deleted))
+            for line in res.scalars().all()
         ]
 
     @strawberry.field
@@ -86,12 +86,12 @@ class Query:
         res = await session.execute(select(Machine).where(Machine.is_deleted.is_(False)))
         return [
             MachineType(
-                id=m.id or 0,
-                name=m.name,
-                line_id=m.line_id,
-                is_deleted=bool(m.is_deleted),
+                id=machine.id or 0,
+                name=machine.name,
+                line_id=machine.line_id,
+                is_deleted=bool(machine.is_deleted),
             )
-            for m in res.scalars().all()
+            for machine in res.scalars().all()
         ]
 
 
