@@ -62,12 +62,12 @@ jobs:
           JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
         run: |
-          echo "📝 Writing .env.stage for backend and frontend..."
+          echo "📝 Writing .env.stage files on server..."
           ssh "deployer@${REMOTE_HOST}" bash -lc '
             set -e
             cd /home/deployer/dev/hom_mvp
 
-            # --- Backend .env.stage ---
+            # --- Backend ---
             cat > .env.stage <<EOT
             APP_ENV=stage
             DB_URL=${DB_URL_STAGE}
@@ -77,7 +77,7 @@ jobs:
             REDIS_URL=redis://redis:6379
             EOT
 
-            # --- Frontend .env.stage ---
+            # --- Frontend ---
             mkdir -p frontend
             cat > frontend/.env.stage <<EOT
             VITE_API_URL=${CORS_ORIGINS_STAGE}
@@ -87,7 +87,7 @@ jobs:
             echo "✅ Environment files created."
             echo "------------------------------------"
             echo "Backend .env.stage:"
-            cat .env.stage | sed 's/\(JWT_SECRET=\).*/\1[REDACTED]/'
+            cat .env.stage | sed "s/\(JWT_SECRET=\).*/\1[REDACTED]/"
             echo "------------------------------------"
             echo "Frontend .env.stage:"
             cat frontend/.env.stage
