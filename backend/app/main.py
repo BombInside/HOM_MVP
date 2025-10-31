@@ -27,17 +27,14 @@ app.include_router(admin_router)
 
 @app.on_event("startup")
 async def startup() -> None:
-    """
-    Создание таблиц и инициализация RBAC-ролей при первом запуске приложения.
-    """
+    """Создание таблиц и начальная инициализация RBAC при первом запуске."""
     print("🗄️  Инициализация базы данных...")
     await create_db_and_tables()
 
-    print("🔐 Проверка наличия ролей и разрешений (RBAC seed)...")
     async with async_session() as session:
         await RBACSeed.seed(session)
 
-    print("✅ База данных и роли успешно инициализированы.")
+    print("✅ Инициализация завершена.")
 
 
 @app.get("/health")

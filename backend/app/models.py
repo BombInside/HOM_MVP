@@ -24,13 +24,10 @@ class RolePermissionLink(SQLModel, table=True):
 # ==========================
 
 class Permission(SQLModel, table=True):
-    """
-    Право доступа в системе (Permission).
-    Используется для детализации возможностей ролей.
-    """
+    """Право доступа (Permission)."""
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
-    description: Optional[str] = Field(default=None)
+    description: Optional[str] = None
 
     roles: List["Role"] = Relationship(back_populates="permissions", link_model=RolePermissionLink)
 
@@ -40,12 +37,10 @@ class Permission(SQLModel, table=True):
 # ==========================
 
 class Role(SQLModel, table=True):
-    """
-    Роль в системе (например: admin, operator, viewer, developer).
-    """
+    """Роль в системе (admin, operator, viewer, developer)."""
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
-    description: Optional[str] = Field(default=None)
+    description: Optional[str] = None
 
     users: List["User"] = Relationship(back_populates="roles", link_model=UserRoleLink)
     permissions: List[Permission] = Relationship(back_populates="roles", link_model=RolePermissionLink)
@@ -56,10 +51,7 @@ class Role(SQLModel, table=True):
 # ==========================
 
 class User(SQLModel, table=True):
-    """
-    Пользователь системы.
-    Может иметь несколько ролей, которые определяют его права.
-    """
+    """Пользователь системы."""
     id: Optional[int] = Field(default=None, primary_key=True)
     email: str = Field(index=True, unique=True)
     hashed_password: str
@@ -71,14 +63,10 @@ class User(SQLModel, table=True):
 
 
 # ==========================
-#  Модель Machine (пример)
+#  Пример модели
 # ==========================
 
 class Machine(SQLModel, table=True):
-    """
-    Пример вспомогательной модели.
-    Используется для управления оборудованием.
-    """
     id: Optional[int] = Field(default=None, primary_key=True)
     name: str = Field(index=True, unique=True)
     status: Optional[str] = None
@@ -86,27 +74,13 @@ class Machine(SQLModel, table=True):
 
 
 # ==========================
-#  Модель Line (новая)
-# ==========================
-
-class Line(SQLModel, table=True):
-    """
-    Производственная линия (используется в GraphQL и админке).
-    """
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, unique=True, nullable=False)
-    description: Optional[str] = Field(default=None)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
-
-
-# ==========================
-#  Системные служебные данные
+#  Служебный класс RBACSeed
 # ==========================
 
 class RBACSeed:
     """
     Служебный класс для начального заполнения ролей и разрешений.
-    Используется при запуске приложения (startup event).
+    Безопасен к повторным вызовам (не создаёт дубликаты).
     """
 
     DEFAULT_ROLES = {
@@ -121,80 +95,64 @@ class RBACSeed:
             ],
         },
         "operator": {
-            "description": "Операционное управление, без доступа к настройкам и ролям",
-            "permissions": [
-                "view_dashboard",
-                "manage_tasks",
-                "view_logs",
-            ],
+            "description": "Управление задачами без доступа к настройкам",
+            "permissions": ["view_dashboard", "manage_tasks", "view_logs"],
         },
         "viewer": {
             "description": "Только чтение данных",
-            "permissions": [
-                "view_dashboard",
-                "view_logs",
-            ],
+            "permissions": ["view_dashboard", "view_logs"],
         },
         "developer": {
-            "description": "Доступ к API, тестам и интеграциям",
-            "permissions": [
-                "view_dashboard",
-                "use_api",
-                "deploy_code",
-            ],
+            "description": "Доступ к API и DevOps-инструментам",
+            "permissions": ["view_dashboard", "use_api", "deploy_code"],
         },
     }
 
     @classmethod
-    async def seed(cls, session):
-        """
-        Автоматическое заполнение ролей и разрешений при первом запуске.
-        """
+    async def seed(cls, session) -> None:
+        """Создаёт роли и разрешения, если они ещё не существуют."""
         from sqlalchemy import select
-        # 🔧 Исправленный импорт — теперь Role и Permission определены
-        from app.models import Role, Permission
 
+        # Проверяем, есть ли хоть одна роль
         result = await session.execute(select(Role))
         existing_roles = result.scalars().all()
 
-        # если таблица ролей пуста — создаём стандартные
-        if not existing_roles:
-            all_permissions: dict[str, Permission] = {}
+        if existing_roles:
+            print("🔁 RBAC роли уже существуют, пропускаем инициализацию.")
+            return
 
-            # создаём все permissions
-            for role_name, role_data in cls.DEFAULT_ROLES.items():
-                for perm_name in role_data["permissions"]:
-                    if perm_name not in all_permissions:
-                        perm = Permission(name=perm_name, description=f"Permission: {perm_name}")
-                        session.add(perm)
-                        all_permissions[perm_name] = perm
+        print("🚀 Создание стандартных ролей и разрешений...")
 
-            await session.commit()
+        # Создаём все уникальные разрешения
+        permissions_map: dict[str, Permission] = {}
+        for role_data in cls.DEFAULT_ROLES.values():
+            for perm_name in role_data["permissions"]:
+                if perm_name not in permissions_map:
+                    perm = Permission(name=perm_name, description=f"Permission: {perm_name}")
+                    session.add(perm)
+                    permissions_map[perm_name] = perm
 
-            # обновляем permissions из БД
-            result = await session.execute(select(Permission))
-            permissions = {p.name: p for p in result.scalars().all()}
+        await session.commit()
 
-            # создаём роли и назначаем им разрешения
-            for role_name, role_data in cls.DEFAULT_ROLES.items():
-                role = Role(name=role_name, description=role_data["description"])
-                role.permissions = [permissions[p] for p in role_data["permissions"]]
-                session.add(role)
+        # Обновляем список разрешений
+        result = await session.execute(select(Permission))
+        permissions_by_name = {p.name: p for p in result.scalars().all()}
 
-            await session.commit()
-            print("[RBAC] Default roles and permissions have been seeded.")
+        # Создаём роли
+        for role_name, role_data in cls.DEFAULT_ROLES.items():
+            role = Role(name=role_name, description=role_data["description"])
+            role.permissions = [permissions_by_name[p] for p in role_data["permissions"]]
+            session.add(role)
 
+        await session.commit()
+        print("✅ RBAC роли и разрешения успешно созданы.")
 
-# ==========================
-#  Подсказки для IDE и MyPy
-# ==========================
 
 __all__ = [
     "User",
     "Role",
     "Permission",
     "Machine",
-    "Line",
     "UserRoleLink",
     "RolePermissionLink",
     "RBACSeed",
