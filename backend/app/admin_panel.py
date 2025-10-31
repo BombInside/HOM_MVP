@@ -9,7 +9,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, text, literal_column
+from sqlalchemy import select, and_, true_
 from typing import Optional, Sequence, List, Callable, Awaitable, Any
 import hashlib
 
@@ -26,7 +26,7 @@ templates = Jinja2Templates(directory="app/templates")
 # ======================================================
 
 def hash_password(password: str) -> str:
-    """Хеширование пароля (демо-версия, заменить на bcrypt/argon2 в продакшене)."""
+    """Хеширование пароля (демо, заменить на bcrypt в продакшене)."""
     return hashlib.sha256(password.encode("utf-8")).hexdigest()
 
 
@@ -128,9 +128,8 @@ async def bootstrap_action(
         )
 
     # ищем или создаём роль администратора
-    res = await session.execute(
-        select(Role).where(text("name IN ('admin', 'administrator')"))  # type: ignore[arg-type]
-    )
+    condition = and_(true_(), Role.name.in_(["admin", "administrator"]))
+    res = await session.execute(select(Role).where(condition))
     role = res.scalar_one_or_none()
     if not role:
         role = Role(name="admin", description="Administrator with full access")
@@ -236,8 +235,6 @@ async def new_role_page(
     )
 
 
-from sqlalchemy import cast, Integer
-
 @router.post("/roles/new")
 async def create_role(
     request: Request,
@@ -248,6 +245,8 @@ async def create_role(
     user: User = Depends(require_permission("manage_roles")),
 ):
     """Создание новой роли и назначение прав."""
+    from sqlalchemy import cast, Integer
+
     new_role = Role(name=name, description=description)
     if permissions:
         valid_ids = [int(pid) for pid in permissions if pid]
@@ -259,7 +258,6 @@ async def create_role(
     session.add(new_role)
     await session.commit()
     return RedirectResponse("/adminpanel/roles", status_code=status.HTTP_303_SEE_OTHER)
-
 
 
 # ======================================================
