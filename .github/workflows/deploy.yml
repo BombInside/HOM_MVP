@@ -104,11 +104,6 @@ jobs:
             REDIS_URL=redis://redis:6379
             EOT
 
-            echo "✅ .env.stage created."
-            echo "------------------------------------"
-            echo "📄 Contents of .env.stage:"
-            cat .env.stage | sed 's/\(JWT_SECRET=\).*/\1[REDACTED]/'
-            echo "------------------------------------"
           EOF
 
       # --- Проверка и пересборка backend ---
