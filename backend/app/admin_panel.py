@@ -9,7 +9,7 @@ from fastapi import (
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_
+from sqlalchemy import select
 from typing import Optional, Sequence, List, Callable, Awaitable, Any
 import hashlib
 
@@ -31,18 +31,18 @@ def hash_password(password: str) -> str:
 
 async def admin_exists(session: AsyncSession) -> bool:
     """Проверяет, есть ли хотя бы один пользователь с ролью admin."""
-    result = await session.execute(select(Role))
-    all_roles: Sequence[Role] = result.scalars().all()
-    admin_role_ids = [r.id for r in all_roles if r.name.lower() in ("admin", "administrator")]
+    result_roles = await session.execute(select(Role))
+    all_roles: Sequence[Role] = result_roles.scalars().all()
+    admin_role_ids = [r.id for r in all_roles if r.name and r.name.lower() in ("admin", "administrator")]
 
     if not admin_role_ids:
         return False
 
-    result = await session.execute(select(User))
-    all_users: Sequence[User] = result.scalars().all()
+    result_users = await session.execute(select(User))
+    all_users: Sequence[User] = result_users.scalars().all()
     for user in all_users:
-        roles = getattr(user, "roles", [])
-        if any(r.id in admin_role_ids for r in roles):
+        user_roles = getattr(user, "roles", [])
+        if any(r.id in admin_role_ids for r in user_roles if r.id is not None):
             return True
     return False
 
@@ -62,7 +62,7 @@ async def get_current_admin(request: Request, session: AsyncSession) -> Optional
     if not user:
         return None
     for role in getattr(user, "roles", []):
-        if role.name.lower() in ("admin", "administrator"):
+        if role.name and role.name.lower() in ("admin", "administrator"):
             return user
     return None
 
@@ -71,9 +71,10 @@ async def get_current_admin(request: Request, session: AsyncSession) -> Optional
 # RBAC-декоратор
 # ======================================================
 
-def require_permission(permission_name: str) -> Callable[[Any], Callable[..., Awaitable[Any]]]:
+def require_permission(permission_name: str) -> Callable[..., Awaitable[User]]:
     """
-    Зависимость FastAPI для проверки наличия разрешения у пользователя.
+    Зависимость для проверки наличия разрешения у пользователя.
+    Возвращает текущего пользователя, если у него есть нужное разрешение.
     """
 
     async def dependency(
@@ -126,7 +127,7 @@ async def bootstrap_action(
         )
 
     # ищем или создаём роль администратора
-    res = await session.execute(select(Role).where(or_(Role.name == "admin", Role.name == "administrator")))
+    res = await session.execute(select(Role).where(Role.name.in_(["admin", "administrator"])))
     role = res.scalar_one_or_none()
     if not role:
         role = Role(name="admin", description="Administrator with full access")
@@ -171,7 +172,7 @@ async def login_action(
         return RedirectResponse("/adminpanel/login?err=Неверный+логин+или+пароль", status_code=status.HTTP_303_SEE_OTHER)
 
     roles = getattr(user, "roles", [])
-    if not any(r.name.lower() in ("admin", "administrator") for r in roles):
+    if not any(r.name and r.name.lower() in ("admin", "administrator") for r in roles):
         return RedirectResponse("/adminpanel/login?err=Недостаточно+прав", status_code=status.HTTP_303_SEE_OTHER)
 
     request.session["user_id"] = user.id
@@ -243,10 +244,12 @@ async def create_role(
 ):
     """Создание новой роли и назначение прав."""
     new_role = Role(name=name, description=description)
-    if permissions and len(permissions) > 0:
-        res = await session.execute(select(Permission).where(Permission.id.in_(permissions)))  # type: ignore[arg-type]
-        perms: List[Permission] = list(res.scalars().all())
-        new_role.permissions = perms
+    if permissions:
+        valid_ids = [int(pid) for pid in permissions if pid]
+        if valid_ids:
+            res = await session.execute(select(Permission).where(Permission.id.in_(valid_ids)))  # type: ignore[arg-type]
+            perms: List[Permission] = list(res.scalars().all())
+            new_role.permissions = perms
     session.add(new_role)
     await session.commit()
     return RedirectResponse("/adminpanel/roles", status_code=status.HTTP_303_SEE_OTHER)
