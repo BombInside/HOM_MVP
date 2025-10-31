@@ -17,7 +17,6 @@ jobs:
           POSTGRES_USER: hom_user
           POSTGRES_PASSWORD: hom_pass
           POSTGRES_DB: hom_db
-        # Настройка healthcheck и имени сервиса (для разрешения имен хостов в тестах)
         options: >-
           --health-cmd "pg_isready -U hom_user -d hom_db"
           --health-interval 5s
@@ -28,13 +27,15 @@ jobs:
           - 5432:5432
       redis:
         image: redis:7.2-alpine
-        command: redis-server --appendonly yes
+        # ❌ ИСПРАВЛЕНО: Убран ключ 'command', аргументы перенесены в 'options'
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 3s
           --health-timeout 3s
           --health-retries 5
           --name hom_redis
+          # Аргументы для default CMD (redis-server) передаются через options
+          --appendonly yes
         ports:
           - 6379:6379
 
@@ -53,12 +54,11 @@ jobs:
       - name: Install backend deps & Test dependencies
         run: |
           python -m pip install --upgrade pip
-          # Устанавливаем все зависимости, включая инструменты качества и тестирования
           pip install -r requirements.txt
           pip install ruff black mypy pytest pytest-asyncio httpx
 
       - name: 🔬 Ruff (Check Formatting & Linting)
-        # ✅ Только проверка, авто-фикс выполняется локально (через pre-commit)
+        # ✅ Только проверка (Check), чтобы CI не менял код
         run: ruff check .
 
       - name: 🎨 Black (Check Formatting)
@@ -70,15 +70,14 @@ jobs:
           mypy --ignore-missing-imports .
       
       - name: 🚀 Run Tests (Unit & Integration)
-        # GitHub Actions автоматически ждет, пока сервисы станут здоровыми (health check)
+        # Тесты запускаются после того, как сервисы Postgres и Redis пройдут health-check
         run: |
           pytest
         env:
-          # Переопределение переменных окружения для тестов, чтобы они использовали имена сервисов (postgres, redis), 
-          # которые доступны в сети GitHub Actions
+          # Переменные окружения для подключения к сервисам CI
           DB_URL: postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db
           REDIS_URL: redis://redis:6379
-          JWT_SECRET: test-secret-for-ci # Используем тестовый секрет
+          JWT_SECRET: test-secret-for-ci
 
 
   frontend-ci:
@@ -98,7 +97,6 @@ jobs:
         run: npm ci
 
       - name: Build (sanity)
-        # Проверяет, что сборка проходит без ошибок, используя переменные из docker-compose
         env:
           VITE_API_URL: http://localhost:8000
         run: npm run build
