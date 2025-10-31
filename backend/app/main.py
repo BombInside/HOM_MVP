@@ -1,5 +1,4 @@
-from fastapi import FastAPI, Request, Depends
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 import redis.asyncio as redis
@@ -13,10 +12,10 @@ settings = get_settings()
 
 app = FastAPI(title="HOM Backend")
 
-# error middleware
+# 🧱 Middleware (глобальная обработка ошибок)
 app.middleware("http")(json_error_middleware)
 
-# CORS
+# 🌍 CORS настройка
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.CORS_ORIGINS],
@@ -25,23 +24,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# GraphQL
+# 🔗 GraphQL маршруты
 app.include_router(graphql_app, prefix="/graphql")
 
+
+# 🔥 Health-check endpoints
 @app.get("/health")
 async def health_check():
+    """Проверка доступности backend API"""
     return {"status": "ok", "env": settings.APP_ENV}
+
 
 @app.get("/db-health")
 async def db_health(session=Depends(get_session)):
+    """Проверка соединения с базой"""
     try:
         await session.execute(text("SELECT 1"))
         return {"status": "ok"}
     except Exception:
         return {"status": "error"}
 
+
 @app.get("/redis-health")
 async def redis_health():
+    """Проверка соединения с Redis"""
     try:
         r = redis.from_url(settings.REDIS_URL, decode_responses=True)
         pong = await r.ping()
