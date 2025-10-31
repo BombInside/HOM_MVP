@@ -1,55 +1,35 @@
-import os
-from typing import AsyncGenerator
+from __future__ import annotations
 
-from sqlmodel import SQLModel
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from typing import Any, AsyncGenerator, cast
+
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
+from sqlmodel import SQLModel
 
-# =====================================================
-# ✅ DATABASE CONFIGURATION
-# =====================================================
-DATABASE_URL = os.getenv(
-    "DB_URL",
-    "postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db"
-)
+from .config import settings
 
 
 def get_db_url() -> str:
-    """Возвращает URL для подключения к базе данных (используется Alembic)."""
-    return DATABASE_URL
+    """Алебик/env.py дергает эту функцию; оставляем здесь для совместимости."""
+    return settings.DB_URL
 
 
-# =====================================================
-# ✅ SQLAlchemy engine & session
-# =====================================================
-engine = create_async_engine(DATABASE_URL, echo=True, future=True)
+# Движок
+engine: AsyncEngine = create_async_engine(settings.DB_URL, echo=False, future=True)
 
-async_session_maker = sessionmaker(
-    bind=engine,
+# sessionmaker со строгой типизацией (обход ограничений типовых аннотаций sqlalchemy-stubs)
+AsyncSessionLocal = sessionmaker(
+    bind=cast(Any, engine),
     class_=AsyncSession,
-    expire_on_commit=False
+    expire_on_commit=False,
+    autoflush=False,
 )
 
 
-# =====================================================
-# ✅ Dependency для FastAPI
-# =====================================================
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """Dependency для получения асинхронной сессии SQLAlchemy"""
-    async with async_session_maker() as session:
+    """Зависимость FastAPI для выдачи async-сессии."""
+    async with AsyncSessionLocal() as session:
         yield session
 
 
-# =====================================================
-# ✅ DB Initialization
-# =====================================================
-async def init_db() -> None:
-    """Создаёт все таблицы, если их нет (для dev-режима)"""
-    async with engine.begin() as conn:
-        await conn.run_sync(SQLModel.metadata.create_all)
-
-
-# =====================================================
-# ✅ BACKWARD COMPATIBILITY (для GraphQL)
-# =====================================================
-async_session = async_session_maker  # 👈 добавь эту строку
+__all__ = ["SQLModel", "engine", "get_session", "get_db_url", "AsyncSession"]

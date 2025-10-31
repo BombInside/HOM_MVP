@@ -1,57 +1,57 @@
+from __future__ import annotations
+
+from typing import Any, Awaitable, Callable, List, Optional, TypeVar, cast
+
 import strawberry
-from typing import List, Optional
-from fastapi import Depends, HTTPException, status
-from datetime import datetime
-from strawberry.fastapi import GraphQLRouter
-from sqlmodel import select
-from sqlalchemy import not_
+from sqlalchemy import not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, field_validator
+from strawberry.fastapi import GraphQLRouter
+from strawberry.types import Info
 
-from ..db import async_session
-from ..models import Line, Machine, AuditLog, User, Repair
+from fastapi import Depends, status, HTTPException
+
 from ..auth import get_current_user, has_role
+from ..db import get_session
+from ..models import AuditLog, Line, Machine, Repair, User
+
+# =========================
+# Контекст
+# =========================
 
 
-async def get_session() -> AsyncSession:
-    async with async_session() as s:
-        yield s
-
-
-def get_context(
+async def get_context(
     session: AsyncSession = Depends(get_session),
-    current_user: User = Depends(get_current_user)
-):
+    current_user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     return {"session": session, "user": current_user}
 
 
-def requires_role_graphql(required_role_name: str):
-    def decorator(func):
-        async def wrapper(*args, info: strawberry.types.Info, **kwargs):
+# =========================
+# RBAC декоратор (типобезопасный)
+# =========================
+
+F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
+
+
+def requires_role_graphql(required_role_name: str) -> Callable[[F], F]:
+    def decorator(func: F) -> F:
+        async def wrapper(*args: Any, info: Info, **kwargs: Any) -> Any:  # type: ignore[override]
             user: User = info.context.get("user")
             if not user or not has_role(user, required_role_name):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission denied. Requires role: {required_role_name}"
+                    detail=f"Permission denied. Requires role: {required_role_name}",
                 )
             return await func(*args, info=info, **kwargs)
-        return wrapper
+
+        return cast(F, wrapper)
+
     return decorator
 
 
-class RepairCreateInput(BaseModel):
-    machine_id: int
-    title: str
-    description: Optional[str] = None
-    started_at: datetime
-    finished_at: Optional[datetime] = None
-
-    @field_validator('finished_at')
-    @classmethod
-    def validate_dates(cls, v, info):
-        if info.data.get('started_at') and v and v <= info.data['started_at']:
-            raise ValueError('Finished time must be strictly after started time.')
-        return v
+# =========================
+# GraphQL типы
+# =========================
 
 
 @strawberry.type
@@ -74,41 +74,75 @@ class RepairType:
     id: int
     machine_id: int
     title: str
-    description: Optional[str] = None
-    started_at: datetime
-    finished_at: Optional[datetime] = None
+    description: Optional[str]
+    started_at: strawberry.scalar(str)  # упрощённый scalar для региональной совместимости
+    finished_at: Optional[strawberry.scalar(str)]
     created_by: int
     is_deleted: bool
+
+
+@strawberry.input
+class RepairCreateInput:
+    machine_id: int
+    title: str
+    description: Optional[str] = None
+    started_at: strawberry.scalar(str)
+    finished_at: Optional[strawberry.scalar(str)] = None
+
+
+# =========================
+# Query
+# =========================
 
 
 @strawberry.type
 class Query:
     @strawberry.field
-    async def lines(self, info) -> List[LineType]:
+    async def lines(self, info: Info) -> List[LineType]:
         session: AsyncSession = info.context["session"]
         res = await session.execute(select(Line).where(not_(Line.is_deleted)))
-        return [
-            LineType(id=row.id, name=row.name, is_deleted=row.is_deleted)
-            for row in res.scalars().all()
-        ]
+        items = res.scalars().all()
+        out: List[LineType] = []
+        for line in items:
+            assert line.id is not None  # для mypy: в БД записанные строки всегда с id
+            out.append(
+                LineType(
+                    id=line.id,
+                    name=line.name,
+                    is_deleted=bool(line.is_deleted),
+                )
+            )
+        return out
 
     @strawberry.field
-    async def machines(self, info) -> List[MachineType]:
+    async def machines(self, info: Info) -> List[MachineType]:
         session: AsyncSession = info.context["session"]
         res = await session.execute(select(Machine).where(not_(Machine.is_deleted)))
-        return [
-            MachineType(
-                id=row.id, asset=row.asset, line_id=row.line_id, is_deleted=row.is_deleted
+        items = res.scalars().all()
+        out: List[MachineType] = []
+        for machine in items:
+            assert machine.id is not None
+            out.append(
+                MachineType(
+                    id=machine.id,
+                    asset=machine.asset,  # убедитесь, что в модели поле называется `asset`
+                    line_id=machine.line_id,
+                    is_deleted=bool(machine.is_deleted),
+                )
             )
-            for row in res.scalars().all()
-        ]
+        return out
+
+
+# =========================
+# Mutations
+# =========================
 
 
 @strawberry.type
 class Mutation:
-    @requires_role_graphql("Admin")
     @strawberry.mutation
-    async def create_line(self, info, name: str) -> LineType:
+    @requires_role_graphql("Admin")
+    async def create_line(self, info: Info, name: str) -> LineType:
         session: AsyncSession = info.context["session"]
         user: User = info.context["user"]
 
@@ -117,6 +151,7 @@ class Mutation:
         await session.commit()
         await session.refresh(new_line)
 
+        # audit
         audit = AuditLog(
             entity="Line",
             entity_id=str(new_line.id),
@@ -127,15 +162,23 @@ class Mutation:
         session.add(audit)
         await session.commit()
 
-        return LineType(id=new_line.id, name=new_line.name, is_deleted=new_line.is_deleted)
+        assert new_line.id is not None
+        return LineType(id=new_line.id, name=new_line.name, is_deleted=bool(new_line.is_deleted))
 
-    @requires_role_graphql("Technician")
     @strawberry.mutation
-    async def create_repair(self, info, data: RepairCreateInput) -> RepairType:
+    @requires_role_graphql("Technician")
+    async def create_repair(self, info: Info, data: RepairCreateInput) -> RepairType:
         session: AsyncSession = info.context["session"]
         user: User = info.context["user"]
 
-        new_repair = Repair(**data.model_dump(), created_by=user.id)
+        new_repair = Repair(
+            machine_id=data.machine_id,
+            title=data.title,
+            description=data.description,
+            started_at=data.started_at,
+            finished_at=data.finished_at,
+            created_by=user.id,
+        )
         session.add(new_repair)
         await session.commit()
         await session.refresh(new_repair)
@@ -145,13 +188,33 @@ class Mutation:
             entity_id=str(new_repair.id),
             action="CREATE",
             performed_by=user.id,
-            diff=data.model_dump(),
+            diff={
+                "machine_id": data.machine_id,
+                "title": data.title,
+                "description": data.description,
+                "started_at": data.started_at,
+                "finished_at": data.finished_at,
+            },
         )
         session.add(audit)
         await session.commit()
 
-        return RepairType(**new_repair.model_dump())
+        assert new_repair.id is not None
+        return RepairType(
+            id=new_repair.id,
+            machine_id=new_repair.machine_id,
+            title=new_repair.title,
+            description=new_repair.description,
+            started_at=str(new_repair.started_at),
+            finished_at=str(new_repair.finished_at) if new_repair.finished_at else None,
+            created_by=new_repair.created_by,
+            is_deleted=bool(new_repair.is_deleted),
+        )
 
+
+# =========================
+# Schema & Router
+# =========================
 
 schema = strawberry.Schema(query=Query, mutation=Mutation)
-graphql_app = GraphQLRouter(schema, context_getter=get_context)
+graphql_app: GraphQLRouter = GraphQLRouter(schema, context_getter=get_context)
