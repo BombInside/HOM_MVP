@@ -26,8 +26,7 @@ jobs:
           - 5432:5432
       redis:
         image: redis:7.2-alpine
-        # ✅ ИСПРАВЛЕНО: Используем 'command' для передачи аргументов CMD Redis
-        command: redis-server --appendonly yes 
+        # ❌ ИСПРАВЛЕНО: Ключ 'command' (строка 30) удален, так как он не поддерживается GitHub Actions.
         options: >-
           --health-cmd "redis-cli ping"
           --health-interval 3s
