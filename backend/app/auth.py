@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 from fastapi import Depends, Header, HTTPException, status
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import select, literal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import settings
@@ -30,7 +30,8 @@ def verify_password(raw: str, hashed: str) -> bool:
 def create_access_token(payload: dict[str, Any], expires_delta: Optional[int] = None) -> str:
     """Создает JWT-токен с опциональным временем жизни."""
     to_encode = payload.copy()
-    expire_minutes = float(expires_delta or getattr(settings, "JWT_EXPIRE_MIN", 60))
+    jwt_expire = getattr(settings, "JWT_EXPIRE_MIN", 60)
+    expire_minutes: float = float(expires_delta) if expires_delta is not None else float(jwt_expire)
     expire = datetime.utcnow() + timedelta(minutes=expire_minutes)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=ALGORITHM)
@@ -67,7 +68,7 @@ async def get_current_user(
         )
 
     # mypy-safe SQLAlchemy select
-    stmt = cast(Any, select(User).where(User.id == int(user_id)))  # fixed type-safety
+    stmt = cast(Any, select(User).where(User.id == literal(int(user_id))))
     result = await session.execute(stmt)
     user = result.scalars().first()
 
