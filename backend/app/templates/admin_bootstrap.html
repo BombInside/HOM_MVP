@@ -1,14 +1,56 @@
 <!DOCTYPE html>
-<html>
-<head><meta charset="utf-8"><title>Создание администратора</title></head>
-<body style="font-family:sans-serif;max-width:520px;margin:40px auto;">
-  <h2>Создание администратора</h2>
-  <form method="post" action="/adminpanel/bootstrap">
-    <label>Email администратора:</label><br/>
-    <input type="email" name="email" required style="width:100%;padding:8px"/><br/><br/>
-    <label>Пароль:</label><br/>
-    <input type="password" name="password" required style="width:100%;padding:8px"/><br/><br/>
-    <button type="submit">Создать</button>
-  </form>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Создание администратора</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 flex items-center justify-center h-screen">
+
+  <div class="bg-white p-8 rounded-2xl shadow-lg w-full max-w-md text-center">
+    {% if not admin_exists %}
+      <h1 class="text-2xl font-bold mb-4">Создание администратора</h1>
+      <form method="post" action="/adminpanel/bootstrap" class="space-y-4">
+        <input type="email" name="email" placeholder="Email" required
+               class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+        <input type="password" name="password" placeholder="Пароль" required
+               class="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-sky-500 focus:outline-none">
+        <button type="submit"
+                class="w-full bg-sky-600 text-white py-2 rounded-md hover:bg-sky-700 transition">
+          Создать администратора
+        </button>
+      </form>
+    {% else %}
+      <h1 class="text-2xl font-semibold mb-4 text-gray-700">Администратор уже создан</h1>
+      <p class="text-gray-500 mb-4">Создание нового администратора невозможно.</p>
+      <button disabled
+              class="w-full bg-gray-400 text-white py-2 rounded-md cursor-not-allowed">
+        Создание заблокировано
+      </button>
+    {% endif %}
+  </div>
+
+  {% if admin_created %}
+  <!-- Модалка: успех -->
+  <div class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+    <div class="bg-white rounded-2xl p-6 text-center shadow-xl">
+      <h3 class="text-xl font-bold text-green-600 mb-3">Администратор успешно создан!</h3>
+      <p class="text-gray-600 mb-4">Теперь вы можете войти в систему.</p>
+      <a href="/adminpanel/login"
+         class="bg-sky-600 text-white px-4 py-2 rounded-md hover:bg-sky-700">Перейти к входу</a>
+    </div>
+  </div>
+  {% elif admin_exists %}
+  <!-- Модалка: уже есть -->
+  <div class="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50">
+    <div class="bg-white rounded-2xl p-6 text-center shadow-xl">
+      <h3 class="text-xl font-bold text-orange-600 mb-3">Администратор уже существует!</h3>
+      <p class="text-gray-600 mb-4">Используйте форму входа для авторизации.</p>
+      <a href="/adminpanel/login"
+         class="bg-sky-600 text-white px-4 py-2 rounded-md hover:bg-sky-700">Войти</a>
+    </div>
+  </div>
+  {% endif %}
+
 </body>
 </html>
