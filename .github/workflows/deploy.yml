@@ -28,7 +28,7 @@ jobs:
           rsync -az --delete \
             --exclude ".git" \
             --exclude "node_modules" \
-            ./ "deployer@$REMOTE_HOST:/opt/hom_mvp"
+            ./ "deployer@$REMOTE_HOST:/home/deployer/dev/hom_mvp"
 
       - name: Write .env.stage on server
         env:
@@ -39,7 +39,7 @@ jobs:
         run: |
           ssh "deployer@$REMOTE_HOST" bash -lc '
             set -e
-            cd /opt/hom_mvp
+            cd /home/deployer/dev/hom_mvp
             cat > .env.stage <<EOF
             APP_ENV=stage
             DB_URL=${DB_URL_STAGE}
@@ -56,7 +56,7 @@ jobs:
         run: |
           ssh "deployer@$REMOTE_HOST" bash -lc '
             set -e
-            cd /opt/hom_mvp
+            cd /home/deployer/dev/hom_mvp
             docker compose -f docker-compose.stage.yml pull || true
             docker compose -f docker-compose.stage.yml up -d --build
             docker compose -f docker-compose.stage.yml ps
