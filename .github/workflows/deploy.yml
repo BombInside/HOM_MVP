@@ -91,15 +91,15 @@ jobs:
 
             echo "Creating .env.stage..."
             cat > .env.stage <<EOT
-          APP_ENV=stage
-          DB_URL=$DB_URL_STAGE
-          JWT_SECRET=$JWT_SECRET_STAGE
-          JWT_EXPIRE_MIN=60
-          CORS_ORIGINS=$CORS_ORIGINS_STAGE
-          REDIS_URL=redis://redis:6379
-          EOT
+            APP_ENV=stage
+            DB_URL=$DB_URL_STAGE
+            JWT_SECRET=$JWT_SECRET_STAGE
+            JWT_EXPIRE_MIN=60
+            CORS_ORIGINS=$CORS_ORIGINS_STAGE
+            REDIS_URL=redis://redis:6379
+            EOT
 
-EOF
+            EOF
 
       # --- Проверка и пересборка backend ---
       - name: Ensure backend rebuilt if needed
