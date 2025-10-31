@@ -67,22 +67,34 @@ jobs:
             set -e
             cd /home/deployer/dev/hom_mvp
 
-            # --- Backend ---
-            cat > .env.stage <<EOT
-            APP_ENV=stage
-            DB_URL=${DB_URL_STAGE}
-            JWT_SECRET=${JWT_SECRET_STAGE}
-            JWT_EXPIRE_MIN=60
-            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
-            REDIS_URL=redis://redis:6379
-            EOT
+            echo "Creating backend .env.stage..."
+            printf "%s\n" \
+            "APP_ENV=stage" \
+            "DB_URL=${DB_URL_STAGE}" \
+            "JWT_SECRET=${JWT_SECRET_STAGE}" \
+            "JWT_EXPIRE_MIN=60" \
+            "CORS_ORIGINS=${CORS_ORIGINS_STAGE}" \
+            "REDIS_URL=redis://redis:6379" \
+            > .env.stage
 
-            # --- Frontend ---
+            echo "Creating frontend .env.stage..."
             mkdir -p frontend
-            cat > frontend/.env.stage <<EOT
-            VITE_API_URL=${CORS_ORIGINS_STAGE}
-            VITE_APP_ENV=stage
-            EOT
+            printf "%s\n" \
+            "VITE_API_URL=${CORS_ORIGINS_STAGE}" \
+            "VITE_APP_ENV=stage" \
+            > frontend/.env.stage
+
+            echo "✅ Environment files created successfully."
+            echo "------------------------------------"
+            echo "Backend .env.stage (sanitized):"
+            sed "s/\(JWT_SECRET=\).*/\1[REDACTED]/" .env.stage
+            echo "------------------------------------"
+            echo "Frontend .env.stage:"
+            cat frontend/.env.stage
+            echo "------------------------------------"
+
+            echo "🔍 Debugging backend .env.stage (showing raw chars):"
+            cat -A .env.stage
           '
 
       # --- Проверка и пересборка backend ---
