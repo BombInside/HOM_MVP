@@ -1,3 +1,5 @@
+import os
+import sys
 from logging.config import fileConfig
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -8,6 +10,9 @@ from app.config import settings
 
 # Alembic Config object
 config = context.config
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if BASE_DIR not in sys.path:
+    sys.path.append(BASE_DIR)
 
 # для корректной типизации — игнорим предупреждение mypy
 fileConfig(config.config_file_name)  # type: ignore[arg-type]
