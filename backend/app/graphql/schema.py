@@ -11,7 +11,7 @@ from strawberry.types import Info
 
 from ..auth import get_current_user, has_role
 from ..db import get_session
-from ..models import AuditLog, Line, Machine, Repair, User
+from ..models import AuditLog, Line, Machine, Repair, User  # noqa: F401
 
 F = TypeVar("F", bound=Callable[..., Awaitable[Any]])
 
