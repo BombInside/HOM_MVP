@@ -12,7 +12,7 @@ from .graphql.schema import graphql_app
 
 app = FastAPI(title="H.O.M Backend")
 
-# Настройка CORS
+# --- CORS ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -21,15 +21,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Подключаем GraphQL
+# --- GraphQL ---
 app.include_router(graphql_app, prefix="/graphql")
 
 
 @app.get("/health")
 async def health(session: AsyncSession = Depends(get_session)):
-    """Проверка состояния Postgres и среды"""
-    await session.execute(text("SELECT 1"))
-    return {"status": "ok", "env": settings.APP_ENV}
+    """
+    Проверка состояния Postgres и окружения.
+    Возвращает:
+      - status: общее состояние
+      - db_status: ok/error
+      - env: среда (dev/stage/prod)
+    """
+    db_status = "ok"
+    try:
+        await session.execute(text("SELECT 1"))
+    except Exception:
+        db_status = "error"
+
+    return {
+        "status": "ok",
+        "db_status": db_status,
+        "env": settings.APP_ENV,
+    }
 
 
 @app.get("/redis-health")
@@ -39,5 +54,7 @@ async def redis_health():
     try:
         pong = await r.ping()
         return {"status": "ok" if pong else "offline"}
+    except Exception:
+        return {"status": "error"}
     finally:
         await r.aclose()
