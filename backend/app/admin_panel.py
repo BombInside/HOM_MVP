@@ -15,6 +15,7 @@ import hashlib
 
 from app.db import get_session
 from app.models import User, Role, Permission, RBACSeed
+from sqlalchemy import literal
 
 router = APIRouter(prefix="/adminpanel", tags=["Admin Panel"])
 templates = Jinja2Templates(directory="app/templates")
@@ -128,7 +129,7 @@ async def bootstrap_action(
 
     # ищем или создаём роль администратора
     res = await session.execute(
-        select(Role).where(cast(Role.name, String).in_(["admin", "administrator"]))  # type: ignore[arg-type, union-attr, attr-defined]
+        select(Role).where(literal(True).op("AND")(Role.name.in_(["admin", "administrator"])))  # type: ignore[arg-type]
     )
     role = res.scalar_one_or_none()
     if not role:
