@@ -128,7 +128,7 @@ async def bootstrap_action(
 
     # ищем или создаём роль администратора
     res = await session.execute(
-        select(Role).where(Role.name.in_(["admin", "administrator"]))  # type: ignore[attr-defined, arg-type, union-attr]
+    select(Role).where(Role.name.in_(["admin", "administrator"]))  # type: ignore[arg-type, call-overload]
     )
     role = res.scalar_one_or_none()
     if not role:
