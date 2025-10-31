@@ -9,8 +9,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # --- Клонирование репозитория ---
       - uses: actions/checkout@v4
 
+      # --- Настройка SSH-доступа ---
       - name: Setup SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -21,29 +23,27 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
 
-      - name: Push repo to droplet
-        env:
-          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-        run: |
-          rsync -az --delete \
-            --exclude ".git" \
-            --exclude "node_modules" \
-            ./ "deployer@$REMOTE_HOST:/home/deployer/dev/hom_mvp"
-
-      # 🔍 Проверяем, что все нужные секреты заданы
+      # --- Проверка, что все нужные GitHub Secrets заданы ---
       - name: Validate required GitHub Secrets
+        env:
+          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
+          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
+          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
           echo "Validating secrets..."
           REQUIRED_VARS=("DB_URL_STAGE" "JWT_SECRET_STAGE" "CORS_ORIGINS_STAGE" "REMOTE_HOST")
           for VAR in "${REQUIRED_VARS[@]}"; do
-            if [ -z "${!VAR}" ]; then
+            VALUE="${!VAR}"
+            if [ -z "$VALUE" ]; then
               echo "❌ Missing secret: $VAR"
               exit 1
             fi
+            echo "✅ $VAR present"
           done
           echo "✅ All required secrets are present."
 
-      # 🧪 Проверяем содержимое .env.stage до деплоя
+      # --- Проверка значений .env.stage перед деплоем ---
       - name: Validate .env.stage content
         env:
           DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
@@ -67,7 +67,7 @@ jobs:
             exit 1
           fi
 
-          # Проверяем корректность CORS (JSON или URL)
+          # Проверяем корректность формата CORS_ORIGINS
           if ! echo "$CORS_ORIGINS_STAGE" | grep -E '^(\[|http)'; then
             echo "❌ Invalid CORS_ORIGINS_STAGE format. Should be JSON or URL."
             exit 1
@@ -75,6 +75,18 @@ jobs:
 
           echo "✅ .env.stage variables look good."
 
+      # --- Загрузка кода на сервер ---
+      - name: Push repo to droplet
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          echo "📦 Uploading project to server..."
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude "node_modules" \
+            ./ "deployer@$REMOTE_HOST:/home/deployer/dev/hom_mvp"
+
+      # --- Создание/обновление .env.stage на сервере ---
       - name: Write .env.stage on server
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
@@ -82,6 +94,7 @@ jobs:
           JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
         run: |
+          echo "📝 Writing .env.stage file on server..."
           ssh "deployer@$REMOTE_HOST" bash -lc "
             set -e
             cd /home/deployer/dev/hom_mvp
@@ -93,17 +106,28 @@ jobs:
             CORS_ORIGINS=${CORS_ORIGINS_STAGE}
             REDIS_URL=redis://redis:6379
             EOF
+            echo '✅ .env.stage created successfully'
           "
 
+      # --- Пересборка и запуск Docker Compose ---
       - name: Compose up (stage)
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
+          echo "🚀 Deploying to stage..."
           ssh "deployer@$REMOTE_HOST" bash -lc '
             set -e
             cd /home/deployer/dev/hom_mvp
-            echo "🧱 Building and starting containers..."
+
+            echo "🧱 Pulling latest images..."
             docker compose -f docker-compose.stage.yml pull || true
-            docker compose -f docker-compose.stage.yml up -d --build
+
+            echo "🔁 Rebuilding backend if necessary..."
+            docker compose -f docker-compose.stage.yml build backend
+
+            echo "🚀 Starting containers..."
+            docker compose -f docker-compose.stage.yml up -d --remove-orphans
+
+            echo "🔍 Checking container status..."
             docker compose -f docker-compose.stage.yml ps
           '
