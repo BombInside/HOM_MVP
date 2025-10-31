@@ -1,5 +1,3 @@
-# .github/workflows/ci.yml (фрагмент в job: backend-ci)
-
       - name: Black (check only)
         # ❌ ИЗМЕНЕНО: Не фиксируем, а проверяем
         run: |
