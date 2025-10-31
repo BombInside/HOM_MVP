@@ -12,7 +12,7 @@ jobs:
       # --- Клонирование репозитория ---
       - uses: actions/checkout@v4
 
-      # --- Настройка SSH-доступа ---
+      # --- Настройка SSH ---
       - name: Setup SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
@@ -24,15 +24,16 @@ jobs:
           ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
 
       # --- Проверка секретов ---
-      - name: Validate required GitHub Secrets
+      - name: Validate required secrets
         env:
           DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
           JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
+          FRONTEND_API_URL: ${{ secrets.FRONTEND_API_URL }}
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
-          echo "🔍 Validating required secrets..."
-          REQUIRED_VARS=("DB_URL_STAGE" "JWT_SECRET_STAGE" "CORS_ORIGINS_STAGE" "REMOTE_HOST")
+          echo "🔍 Validating secrets..."
+          REQUIRED_VARS=("DB_URL_STAGE" "JWT_SECRET_STAGE" "CORS_ORIGINS_STAGE" "FRONTEND_API_URL" "REMOTE_HOST")
           for VAR in "${REQUIRED_VARS[@]}"; do
             VALUE="${!VAR}"
             if [ -z "$VALUE" ]; then
@@ -41,104 +42,63 @@ jobs:
             fi
             echo "✅ $VAR present"
           done
-          echo "✅ All secrets are valid."
-
-      # --- Подготовка переменных окружения ---
-      - name: Prepare environment variables
-        env:
-          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
-        run: |
-          echo "🔧 Preparing frontend API URL..."
-          if [[ "$CORS_ORIGINS_STAGE" =~ :[0-9]+$ ]]; then
-            echo "✅ Port already present in CORS_ORIGINS_STAGE"
-            echo "VITE_API_URL=${CORS_ORIGINS_STAGE}" >> $GITHUB_ENV
-          else
-            echo "ℹ️ No port in CORS_ORIGINS_STAGE, adding :8000"
-            echo "VITE_API_URL=${CORS_ORIGINS_STAGE}:8000" >> $GITHUB_ENV
-          fi
-          echo "✅ Final VITE_API_URL: $(grep VITE_API_URL $GITHUB_ENV)"
+          echo "✅ All required secrets are set."
 
       # --- Загрузка проекта на сервер ---
       - name: Push repo to droplet
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
-          echo "📦 Uploading project to server..."
+          echo "📦 Syncing project to droplet..."
           rsync -az --delete \
             --exclude ".git" \
             --exclude "node_modules" \
             ./ "deployer@$REMOTE_HOST:/home/deployer/dev/hom_mvp"
 
-      # --- Создание .env.stage на сервере ---
-      - name: Write .env.stage on server
+      # --- Создание .env.stage для backend ---
+      - name: Write backend .env.stage
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
           DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
           JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
           CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
-          VITE_API_URL: ${{ env.VITE_API_URL }}
         run: |
-          echo "📝 Writing .env.stage files on server..."
-          ssh "deployer@${REMOTE_HOST}" bash -lc "set -e
+          echo "🧩 Writing backend .env.stage..."
+          ssh "deployer@${REMOTE_HOST}" bash -lc "
+            set -e
             cd /home/deployer/dev/hom_mvp
-
-            echo 'Creating backend .env.stage...'
-            printf '%s\n' \
-            APP_ENV=stage \
-            DB_URL=${DB_URL_STAGE} \
-            JWT_SECRET=${JWT_SECRET_STAGE} \
-            JWT_EXPIRE_MIN=60 \
-            CORS_ORIGINS=${CORS_ORIGINS_STAGE} \
-            REDIS_URL=redis://redis:6379 \
-            > .env.stage
-
-            echo 'Creating frontend .env.stage...'
-            mkdir -p frontend
-            printf '%s\n' \
-            VITE_API_URL=${VITE_API_URL} \
-            VITE_APP_ENV=stage \
-            > frontend/.env.stage
-
-            echo '✅ .env.stage files created.'
-            echo '------------------------------------'
-            echo 'Backend .env.stage (sanitized):'
-            grep -v 'JWT_SECRET' .env.stage | sed 's/\(DB_URL=\).*/\1postgresql+asyncpg:\/\/***/'
-            echo '------------------------------------'
-            echo 'Frontend .env.stage:'
-            cat frontend/.env.stage
-            echo '------------------------------------'
+            cat > .env.stage <<EOF
+            APP_ENV=stage
+            DB_URL=${DB_URL_STAGE}
+            JWT_SECRET=${JWT_SECRET_STAGE}
+            JWT_EXPIRE_MIN=60
+            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
+            REDIS_URL=redis://redis:6379
+            EOF
           "
 
-      # --- Пересборка backend ---
-      - name: Build backend
+      # --- Создание .env.stage для frontend ---
+      - name: Write frontend .env.stage
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          FRONTEND_API_URL: ${{ secrets.FRONTEND_API_URL }}
         run: |
-          ssh "deployer@${REMOTE_HOST}" bash -lc '
+          echo "🧩 Writing frontend .env.stage..."
+          ssh "deployer@${REMOTE_HOST}" bash -lc "
             set -e
-            cd /home/deployer/dev/hom_mvp
-            echo "🧱 Building backend..."
-            docker compose -f docker-compose.stage.yml build backend
-          '
+            cd /home/deployer/dev/hom_mvp/frontend
+            cat > .env.stage <<EOF
+            VITE_API_URL=${FRONTEND_API_URL}
+            VITE_APP_ENV=stage
+            EOF
+          "
 
-      # --- Пересборка frontend ---
-      - name: Build frontend
-        env:
-          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-        run: |
-          ssh "deployer@${REMOTE_HOST}" bash -lc '
-            set -e
-            cd /home/deployer/dev/hom_mvp
-            echo "🧱 Building frontend..."
-            docker compose -f docker-compose.stage.yml build frontend
-          '
-
-      # --- Деплой ---
+      # --- Пересборка и деплой ---
       - name: Compose up (stage)
         env:
           REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
-          echo "🚀 Deploying to stage..."
+          echo "🚀 Deploying application..."
           ssh "deployer@${REMOTE_HOST}" bash -lc '
             set -e
             cd /home/deployer/dev/hom_mvp
@@ -146,12 +106,15 @@ jobs:
             echo "🧱 Pulling latest images..."
             docker compose -f docker-compose.stage.yml pull || true
 
+            echo "🔁 Rebuilding backend and frontend..."
+            docker compose -f docker-compose.stage.yml build backend frontend
+
             echo "🚀 Starting containers..."
             docker compose -f docker-compose.stage.yml up -d --remove-orphans
 
-            echo "🔍 Checking container status..."
+            echo "🔍 Checking status..."
             docker compose -f docker-compose.stage.yml ps
 
-            echo "📜 Showing last 50 backend logs..."
-            docker compose -f docker-compose.stage.yml logs backend --tail 50 || true
+            echo "📜 Showing last backend logs..."
+            docker compose -f docker-compose.stage.yml logs backend --tail 40 || true
           '
