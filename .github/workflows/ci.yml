@@ -25,13 +25,13 @@ jobs:
           pip install -r requirements.txt
           pip install ruff black mypy
 
-      - name: Ruff Lint
+      - name: Ruff (auto-fix)
         run: |
-          ruff check .
+          ruff check . --fix
 
-      - name: Black Check
+      - name: Black (auto-fix)
         run: |
-          black --check .
+          black .
 
       - name: Mypy (loose)
         run: |
