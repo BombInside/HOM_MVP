@@ -27,14 +27,19 @@ app.include_router(admin_router)
 
 @app.on_event("startup")
 async def startup() -> None:
-    """Создание таблиц и начальная инициализация RBAC при первом запуске."""
+    """Создание таблиц и инициализация RBAC при запуске контейнера."""
     print("🗄️  Инициализация базы данных...")
     await create_db_and_tables()
 
     async with async_session() as session:
-        await RBACSeed.seed(session)
+        try:
+            await RBACSeed.seed(session)
+        except Exception as e:
+            print(f"⚠️ Ошибка инициализации RBAC: {e}")
+        else:
+            print("✅ RBAC инициализация завершена успешно.")
 
-    print("✅ Инициализация завершена.")
+    print("🚀 Приложение готово к работе.")
 
 
 @app.get("/health")
