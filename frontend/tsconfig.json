@@ -10,4 +10,6 @@
   "noEmit": true,
   "jsx": "react-jsx",
   "strict": true
-}, "include": ["src"] }
+}, 
+
+"include": ["src"] }
