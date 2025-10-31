@@ -11,3 +11,4 @@ python-jose==3.3.0
 passlib[bcrypt]==1.7.4
 strawberry-graphql[fastapi]==0.246.1
 python-multipart==0.0.9
+itsdangerous>=2.2
