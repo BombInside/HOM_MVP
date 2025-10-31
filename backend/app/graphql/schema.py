@@ -3,11 +3,11 @@ from __future__ import annotations
 from typing import Any, Awaitable, Callable, List, Optional, TypeVar, cast
 
 import strawberry
+from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from strawberry.fastapi import GraphQLRouter
 from strawberry.types import Info
-from fastapi import Depends, HTTPException, status
 
 from ..auth import get_current_user, has_role
 from ..db import get_session

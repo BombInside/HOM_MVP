@@ -1,56 +1,43 @@
-from fastapi import FastAPI, Depends
+from __future__ import annotations
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 import redis.asyncio as redis
 
-from .error_middleware import json_error_middleware
-from .graphql.schema import graphql_app
-from .config import get_settings
+from .config import settings
 from .db import get_session
+from .graphql.schema import graphql_app
 
-settings = get_settings()
+app = FastAPI(title="H.O.M Backend")
 
-app = FastAPI(title="HOM Backend")
-
-# 🧱 Middleware (глобальная обработка ошибок)
-app.middleware("http")(json_error_middleware)
-
-# 🌍 CORS настройка
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.CORS_ORIGINS],
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# 🔗 GraphQL маршруты
+# Подключаем GraphQL
 app.include_router(graphql_app, prefix="/graphql")
 
 
-# 🔥 Health-check endpoints
 @app.get("/health")
-async def health_check():
-    """Проверка доступности backend API"""
+async def health(session: AsyncSession = get_session.__wrapped__()):  # type: ignore
+    # проверка Postgres
+    async with get_session() as s:  # корректный контекст для реального вызова
+        await s.execute(text("SELECT 1"))
+
     return {"status": "ok", "env": settings.APP_ENV}
-
-
-@app.get("/db-health")
-async def db_health(session=Depends(get_session)):
-    """Проверка соединения с базой"""
-    try:
-        await session.execute(text("SELECT 1"))
-        return {"status": "ok"}
-    except Exception:
-        return {"status": "error"}
 
 
 @app.get("/redis-health")
 async def redis_health():
-    """Проверка соединения с Redis"""
+    r = redis.from_url("redis://redis:6379", decode_responses=True)
     try:
-        r = redis.from_url(settings.REDIS_URL, decode_responses=True)
         pong = await r.ping()
         return {"status": "ok" if pong else "offline"}
-    except Exception:
-        return {"status": "error"}
+    finally:
+        await r.aclose()

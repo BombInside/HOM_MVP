@@ -29,7 +29,7 @@ def create_access_token(payload: dict[str, Any]) -> str:
 
 
 def has_role(user: User, role_name: str) -> bool:
-    """Безопасная проверка роли для SQLAlchemy relationship"""
+    """Проверка роли с учётом возможного отсутствия relationship."""
     roles = getattr(user, "roles", []) or []
     return any(getattr(r, "name", None) == role_name for r in roles)
 
@@ -51,7 +51,7 @@ async def get_current_user(
     if user_id is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
 
-    # ✅ добавляем cast(Any, ...) чтобы mypy не путал с bool
+    # mypy-friendly
     stmt = cast(Any, select(User).where(User.id == int(user_id)))
     result = await session.execute(stmt)
     user = result.scalars().first()
@@ -59,4 +59,3 @@ async def get_current_user(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
     return user
-``
