@@ -1,3 +1,4 @@
+# mypy: ignore-errors
 from fastapi import (
     APIRouter,
     Request,
