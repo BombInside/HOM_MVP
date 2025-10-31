@@ -2,7 +2,7 @@ from fastapi import APIRouter, Request, Depends, Form, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, literal_column
 from typing import Optional, Sequence
 import hashlib
 
@@ -26,7 +26,9 @@ async def get_current_admin(request: Request, session: AsyncSession) -> Optional
     if not user_id:
         return None
 
-    result = await session.execute(select(User).where(User.id == user_id))
+    # Mypy-совместимый select
+    stmt = select(User).where(literal_column("id") == user_id)
+    result = await session.execute(stmt)
     user = result.scalar_one_or_none()
     if not user:
         return None
@@ -72,7 +74,8 @@ async def login_action(
     session: AsyncSession = Depends(get_session),
 ):
     """Авторизация администратора."""
-    result = await session.execute(select(User).where(User.email == email))
+    stmt = select(User).where(literal_column("email") == email)
+    result = await session.execute(stmt)
     user = result.scalar_one_or_none()
     if not user or user.hashed_password != hash_password(password):
         return RedirectResponse("/adminpanel/login?err=Неверный+логин+или+пароль", status_code=status.HTTP_303_SEE_OTHER)
@@ -119,8 +122,9 @@ async def bootstrap_action(
     if await admin_exists(session):
         return RedirectResponse("/adminpanel/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Проверяем наличие роли admin
-    result_role = await session.execute(select(Role).where(Role.name == "admin"))
+    # Проверяем наличие роли admin (через literal_column — безопасно для mypy)
+    stmt = select(Role).where(literal_column("name") == "admin")
+    result_role = await session.execute(stmt)
     role = result_role.scalar_one_or_none()
     if not role:
         role = Role(name="admin", description="Administrator with full access")
