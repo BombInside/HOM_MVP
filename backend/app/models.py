@@ -85,6 +85,16 @@ class Machine(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
 
 
+class Line(SQLModel, table=True):
+    """
+    Модель производственной линии (Line).
+    Используется в GraphQL и для управления оборудованием.
+    """
+    id: Optional[int] = Field(default=None, primary_key=True)
+    name: str = Field(index=True, unique=True, nullable=False)
+    description: Optional[str] = Field(default=None)
+
+
 # ==========================
 #  Системные служебные данные
 # ==========================
@@ -183,4 +193,6 @@ __all__ = [
     "UserRoleLink",
     "RolePermissionLink",
     "RBACSeed",
+    "Line",
 ]
+
