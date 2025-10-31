@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-from typing import Optional
+from typing import Optional, List
 import hashlib
 
 from app.db import get_session
@@ -21,33 +21,42 @@ def hash_password(password: str) -> str:
 
 
 async def get_current_admin(request: Request, session: AsyncSession) -> Optional[User]:
-    """Возвращает текущего пользователя из cookie-сессии, если он администратор."""
+    """
+    Возвращает текущего пользователя из cookie-сессии, если он администратор.
+    Совместимо с типами SQLAlchemy и не вызывает mypy-ошибок.
+    """
     user_id = request.session.get("user_id")
     if not user_id:
         return None
+
     res = await session.execute(select(User).where(User.id == user_id))
     user = res.scalar_one_or_none()
     if not user:
         return None
 
-    # Проверяем роли пользователя (many-to-many)
-    roles = getattr(user, "roles", [])
-    for role in roles:
-        if getattr(role, "name", "").lower() in ("admin", "administrator"):
-            return user
+    roles: List[Role] = getattr(user, "roles", [])
+    if any((getattr(r, "name", "") or "").lower() in ("admin", "administrator") for r in roles):
+        return user
     return None
 
 
 async def admin_exists(session: AsyncSession) -> bool:
-    """Проверяет, существует ли хотя бы один администратор."""
-    roles_res = await session.execute(select(Role).where(Role.name.in_(["admin", "administrator"])))  # type: ignore[arg-type]
-    roles = roles_res.scalars().all()
-    if not roles:
+    """Проверяет, существует ли хотя бы один администратор (без типовых конфликтов)."""
+    # Получаем все роли admin/administrator
+    roles_res = await session.execute(select(Role))
+    roles_all: List[Role] = roles_res.scalars().all()
+    admin_role_ids = [r.id for r in roles_all if (r.name or "").lower() in ("admin", "administrator")]
+    if not admin_role_ids:
         return False
 
-    role_ids = [r.id for r in roles]
-    user_res = await session.execute(select(User).where(User.roles.any(Role.id.in_(role_ids))))  # type: ignore[arg-type]
-    return bool(user_res.scalars().first())
+    # Проверяем пользователей с этими ролями
+    users_res = await session.execute(select(User))
+    users_all: List[User] = users_res.scalars().all()
+    for user in users_all:
+        roles = getattr(user, "roles", [])
+        if any(r.id in admin_role_ids for r in roles):
+            return True
+    return False
 
 
 # ==== Роуты ====
@@ -67,16 +76,15 @@ async def login_action(
     session: AsyncSession = Depends(get_session),
 ):
     """Авторизация администратора."""
-    user_res = await session.execute(select(User).where(User.email == email))
-    user = user_res.scalar_one_or_none()
+    res = await session.execute(select(User).where(User.email == email))
+    user = res.scalar_one_or_none()
     if not user or user.hashed_password != hash_password(password):
         return RedirectResponse("/adminpanel/login?err=Неверный+логин+или+пароль", status_code=status.HTTP_303_SEE_OTHER)
 
-    roles = getattr(user, "roles", [])
-    if not any(getattr(r, "name", "").lower() in ("admin", "administrator") for r in roles):
+    roles: List[Role] = getattr(user, "roles", [])
+    if not any((getattr(r, "name", "") or "").lower() in ("admin", "administrator") for r in roles):
         return RedirectResponse("/adminpanel/login?err=Недостаточно+прав", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Сохраняем user_id в сессии
     request.session["user_id"] = user.id
     return RedirectResponse("/adminpanel", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -115,7 +123,7 @@ async def bootstrap_action(
     if await admin_exists(session):
         return RedirectResponse("/adminpanel/login", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Проверяем роль admin
+    # Проверяем наличие роли admin
     role_res = await session.execute(select(Role).where(Role.name == "admin"))
     role = role_res.scalar_one_or_none()
     if not role:
@@ -124,9 +132,10 @@ async def bootstrap_action(
         await session.commit()
         await session.refresh(role)
 
-    # Создаём пользователя
+    # Создаём пользователя и добавляем роль
     user = User(email=email, hashed_password=hash_password(password))
-    user.roles.append(role)
+    if hasattr(user, "roles"):
+        user.roles.append(role)
     session.add(user)
     await session.commit()
     return RedirectResponse("/adminpanel/login?created=1", status_code=status.HTTP_303_SEE_OTHER)
