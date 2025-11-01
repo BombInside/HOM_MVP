@@ -1,37 +1,46 @@
-import { createBrowserRouter, Navigate } from "react-router-dom";
-import AdminLayout from "./layouts/AdminLayout";
-import AuthLayout from "./layouts/AuthLayout";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import RoleEditor from "./pages/Admin/RoleEditor";
-import UserManager from "./pages/Admin/UserManager";
-import { useAppSelector } from "./app/store";
-import AdminBootstrap from "./pages/Admin/AdminBootstrap";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { useAppSelector, useAppDispatch } from "./app/store";
+import { useEffect } from "react";
+import { fetchCurrentUser } from "./app/slices/authSlice";
 
-const RequireAuth = ({ children }: { children: JSX.Element }) => {
-  const token = useAppSelector((s) => s.auth.accessToken);
-  if (!token) return <Navigate to="/login" replace />;
+import Login from "./pages/Login";
+import AdminBootstrap from "./pages/Admin/AdminBootstrap";
+import Dashboard from "./pages/Admin/Dashboard";
+
+function ProtectedRoute({ children }: { children: JSX.Element }) {
+  const { accessToken, user } = useAppSelector((s) => s.auth);
+  if (!accessToken) return <Navigate to="/login" replace />;
+  if (user && !user.is_admin) return <Navigate to="/login" replace />;
   return children;
+}
+
+const AppRouter = () => {
+  const dispatch = useAppDispatch();
+  const { accessToken, user } = useAppSelector((s) => s.auth);
+
+  useEffect(() => {
+    if (accessToken && !user) {
+      dispatch(fetchCurrentUser());
+    }
+  }, [accessToken, user, dispatch]);
+
+  return (
+    <Router>
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="/adminpanel/bootstrap" element={<AdminBootstrap />} />
+        <Route
+          path="/adminpanel"
+          element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    </Router>
+  );
 };
 
-
-export const router = createBrowserRouter([
-  {
-    element: <AdminLayout />,
-    children: [
-      { path: "/", element: <Navigate to="/dashboard" replace /> },
-      { path: "/dashboard", element: <RequireAuth><Dashboard /></RequireAuth> },
-      { path: "/machines", element: <RequireAuth><div>Machines TBD</div></RequireAuth> },
-      { path: "/admin/roles", element: <RequireAuth><RoleEditor /></RequireAuth> },
-      { path: "/admin/users", element: <RequireAuth><UserManager /></RequireAuth> },
-    ],
-  },
-  {
-    element: <AuthLayout />,
-    children: [
-      { path: "/login", element: <Login /> },
-      { path: "/adminpanel/bootstrap", element: <AdminBootstrap /> }, // ✅
-    ],
-  },
-  { path: "*", element: <div className="p-6">Not Found</div> },
-]);
+export default AppRouter;

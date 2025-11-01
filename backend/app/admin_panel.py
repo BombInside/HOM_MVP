@@ -13,6 +13,10 @@ from app.db import get_session
 from app.models import User, Role, UserRoleLink
 from app.security import hash_password
 
+from fastapi import Depends
+from .routes_auth import get_current_user
+from .models import User
+
 router = APIRouter(prefix="/adminpanel", tags=["AdminPanel"])
 
 
@@ -36,7 +40,7 @@ class BootstrapResponse(BaseModel):
 async def _admin_exists(session: AsyncSession) -> bool:
     """
     Проверяет, существует ли пользователь с ролью 'admin'.
-    Возвращает True/False (чистый bool, без None).
+    Возвращает True/False.
     """
     q = (
         select(User)
@@ -49,7 +53,8 @@ async def _admin_exists(session: AsyncSession) -> bool:
 
 
 # ---------- ЭНДПОИНТЫ ----------
-@router.get("/bootstrap", response_model=BootstrapResponse)
+@router.get("/bootstrap", response_model=BootstrapResponse, dependencies=[Depends(get_current_user)])
+
 async def admin_bootstrap_state(session: AsyncSession = Depends(get_session)) -> BootstrapResponse:
     """Проверяет, создан ли уже администратор."""
     exists = await _admin_exists(session)

@@ -17,26 +17,24 @@ const AdminBootstrap = () => {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    const checkStatus = async () => {
+    let isMounted = true;
+    (async () => {
       try {
-        const res = await api.get("/adminpanel/bootstrap/status");
-        if (res.data?.admin_exists) {
-          setExists(true);
-          setLoading(false);
-          setTimeout(() => {
-            alert("Администратор уже создан. Перенаправление на главную страницу...");
-            navigate("/");
-          }, 2000);
-        } else {
-          setExists(false);
-          setLoading(false);
-        }
-      } catch {
-        setError("Ошибка при проверке статуса администратора");
-        setLoading(false);
+        // Backend возвращает: { ok: true, admin_exists: boolean } или { admin_exists: boolean }
+        const { data } = await api.get("/adminpanel/bootstrap");
+        const adminExists = !!(data?.admin_exists ?? data?.adminExists);
+        if (!isMounted) return;
+        setExists(adminExists);
+      } catch (e) {
+        // Если статус недоступен — всё равно позволим попытаться создать
+        setExists(false);
+      } finally {
+        if (isMounted) setLoading(false);
       }
+    })();
+    return () => {
+      isMounted = false;
     };
-    checkStatus();
   }, [navigate]);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -50,15 +48,25 @@ const AdminBootstrap = () => {
     }
 
     try {
-      const res = await api.post("/adminpanel/bootstrap", { email, password });
-      if (res.data?.success) {
-        setSuccess(res.data.message || "Администратор успешно создан");
-        setTimeout(() => navigate("/login"), 1500);
+      // Backend ожидает: { email, password, confirm_password }
+      const { data } = await api.post("/adminpanel/bootstrap", {
+        email,
+        password,
+        confirm_password: password,
+      });
+      const ok = !!(data?.ok ?? data?.success ?? data?.message);
+      if (ok) {
+        setSuccess(data?.message || "Администратор успешно создан");
+        setTimeout(() => navigate("/login"), 1200);
       } else {
-        setError(res.data?.message || "Ошибка при создании администратора");
+        setError(data?.message || "Ошибка при создании администратора");
       }
     } catch (err: any) {
-      const msg = err?.response?.data?.message || err?.response?.data?.detail || "Ошибка при создании администратора";
+      const msg =
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        err?.message ||
+        "Ошибка при создании администратора";
       setError(msg);
     }
   };
@@ -67,16 +75,27 @@ const AdminBootstrap = () => {
 
   if (exists)
     return (
-      <div className="p-6 text-center">
-        <p className="text-lg">Администратор уже создан</p>
+      <div className="p-6">
+        <div className="max-w-xl mx-auto bg-white dark:bg-gray-800 rounded shadow p-6">
+          <h1 className="text-xl font-semibold mb-3">Администратор уже создан</h1>
+          <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
+            Перейдите на страницу входа, чтобы авторизоваться.
+          </p>
+          <button
+            className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+            onClick={() => navigate("/login")}
+          >
+            Перейти к входу
+          </button>
+        </div>
       </div>
     );
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-50 dark:bg-gray-900">
-      <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-8 w-full max-w-md">
-        <h1 className="text-2xl font-semibold mb-6 text-center">Создание администратора</h1>
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+    <div className="p-6">
+      <div className="max-w-xl mx-auto bg-white dark:bg-gray-800 rounded shadow p-6">
+        <h1 className="text-xl font-semibold mb-4">Создание администратора</h1>
+        <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input
             type="email"
             placeholder="Email"
