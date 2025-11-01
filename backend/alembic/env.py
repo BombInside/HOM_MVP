@@ -15,7 +15,9 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(BASE_DIR)
 sys.path.append(os.path.join(BASE_DIR, "app"))
 
-from app.config import settings
+from app.config import get_settings
+
+settings = get_settings()
 from app.models import *  # noqa: F401, F403 — импортируем все модели, чтобы Alembic видел таблицы
 
 # ----------------------------------------------------
