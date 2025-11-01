@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import List, Union
 from pydantic_settings import BaseSettings
-from pydantic import AnyHttpUrl, field_validator
+from pydantic import AnyHttpUrl, field_validator, Field
 import json
 
 
