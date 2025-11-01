@@ -8,8 +8,8 @@
 from __future__ import annotations
 from functools import lru_cache
 from typing import List, Union
+from pydantic import AnyHttpUrl, Field, field_validator
 from pydantic_settings import BaseSettings
-from pydantic import AnyHttpUrl, field_validator
 import json
 
 
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     ENV: str = "stage"
 
     # БД
-    DB_URL: str
+    DATABASE_URL: str = Field(..., alias="DB_URL")  # ✅ теперь поддерживает и DB_URL, и DATABASE_URL
 
     # JWT / Session
     JWT_SECRET: str
@@ -71,3 +71,4 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     """Кэшированный доступ к настройкам, чтобы не пересоздавать объект Settings."""
     return Settings()  # type: ignore[misc]
+
