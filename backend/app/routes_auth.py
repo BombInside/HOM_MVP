@@ -1,95 +1,110 @@
 # -*- coding: utf-8 -*-
 """
-Маршруты аутентификации (login / me) + зависимость current_user.
+Роуты для админ-панели (bootstrap создания первого администратора).
 """
+
 from __future__ import annotations
-from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List
-
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from jose import jwt, JWTError
+from sqlalchemy import select
+from pydantic import BaseModel, EmailStr, Field
 
-from .config import get_settings
-from .db import get_session
-from .models import User, Role, UserRoleLink
-from .security import verify_password
+from app.db import get_session
+from app.models import User, Role, UserRoleLink
+from app.security import hash_password
 
-router = APIRouter(prefix="/auth", tags=["Auth"])
-settings = get_settings()
-security_scheme = HTTPBearer(auto_error=False)
+router = APIRouter(prefix="/adminpanel", tags=["AdminPanel"])
 
 
-def _create_access_token(sub: str) -> str:
-    expire = datetime.now(tz=timezone.utc) + timedelta(minutes=settings.JWT_EXPIRE_MIN)
-    payload = {"sub": sub, "exp": expire}
-    return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+# ---------- СХЕМЫ ----------
+class BootstrapRequest(BaseModel):
+    """Входные данные для создания первого администратора."""
+    email: EmailStr
+    password: str = Field(min_length=6)
+    confirm_password: str = Field(min_length=6)
 
 
-async def get_current_user(
-    creds: HTTPAuthorizationCredentials = Depends(security_scheme),
+class BootstrapResponse(BaseModel):
+    """Ответ API для bootstrap-эндпоинтов."""
+    ok: bool
+    admin_exists: bool
+    created_user_id: int | None = None
+    message: str | None = None
+
+
+# ---------- СЛУЖЕБНЫЕ ФУНКЦИИ ----------
+async def _admin_exists(session: AsyncSession) -> bool:
+    """
+    Проверяет, существует ли пользователь с ролью 'admin'.
+    Возвращает True/False.
+    """
+    q = (
+        select(User)
+        .join(UserRoleLink, UserRoleLink.user_id == User.id)
+        .join(Role, Role.id == UserRoleLink.role_id)
+        .where(Role.name == "admin")
+    )
+    user = await session.scalar(q)
+    return user is not None
+
+
+# ---------- ЭНДПОИНТЫ ----------
+
+@router.get("/bootstrap", response_model=BootstrapResponse)
+async def admin_bootstrap_state(session: AsyncSession = Depends(get_session)) -> BootstrapResponse:
+    """
+    ✅ Публичный эндпоинт: проверяет, создан ли администратор.
+    Не требует авторизации, чтобы можно было создать первого пользователя.
+    """
+    exists = await _admin_exists(session)
+    return BootstrapResponse(ok=True, admin_exists=exists)
+
+
+@router.post("/bootstrap", response_model=BootstrapResponse)
+async def admin_bootstrap_post(
+    payload: BootstrapRequest,
     session: AsyncSession = Depends(get_session),
-) -> User:
-    """Проверяет JWT и возвращает текущего пользователя или выбрасывает 401."""
-    if not creds:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+) -> BootstrapResponse:
+    """
+    Создаёт первого администратора, если он ещё не существует.
+    Проверяет пароли, наличие роли 'admin', и добавляет связь.
+    """
 
-    token = creds.credentials
-    try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
-        email: str = payload.get("sub")
-        if not email:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-    except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    if payload.password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
 
-    user = await session.scalar(select(User).where(User.email == email))
-    if not user:
-        raise HTTPException(status_code=401, detail="User not found")
+    if await _admin_exists(session):
+        raise HTTPException(status_code=400, detail="Administrator already exists")
 
-    return user
+    q = await session.execute(select(Role).where(Role.name == "admin"))
+    admin_role = q.scalar_one_or_none()
+    if not admin_role:
+        admin_role = Role(name="admin", description="Administrator")
+        session.add(admin_role)
+        await session.flush()
 
+    q = await session.execute(select(User).where(User.email == payload.email))
+    existing = q.scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="User with this email already exists")
 
-@router.post("/login")
-async def login(payload: Dict[str, str], session: AsyncSession = Depends(get_session)) -> Dict[str, Any]:
-    """Логин: проверяет email+пароль и возвращает access_token."""
-    email = (payload.get("email") or "").strip().lower()
-    password = payload.get("password") or ""
-    if not email or not password:
-        raise HTTPException(status_code=400, detail="Email and password are required")
-
-    user = await session.scalar(select(User).where(User.email == email))
-    if not user or not verify_password(password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-    result = await session.execute(
-        select(Role.name)
-        .join(UserRoleLink, UserRoleLink.role_id == Role.id)
-        .where(UserRoleLink.user_id == user.id)
+    user = User(
+        email=str(payload.email),
+        password_hash=hash_password(payload.password),
+        is_active=True,
+        is_admin=True,
     )
-    roles: List[str] = [r[0] for r in result.all()]
+    session.add(user)
+    await session.flush()
 
-    token = _create_access_token(sub=email)
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "user": {"email": user.email, "roles": roles, "is_admin": getattr(user, "is_admin", False)},
-    }
+    link = UserRoleLink(user_id=user.id, role_id=admin_role.id)
+    session.add(link)
 
+    await session.commit()
 
-@router.get("/me")
-async def get_me(current_user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)) -> Dict[str, Any]:
-    """Возвращает сведения о текущем пользователе (по токену)."""
-    result = await session.execute(
-        select(Role.name)
-        .join(UserRoleLink, UserRoleLink.role_id == Role.id)
-        .where(UserRoleLink.user_id == current_user.id)
+    return BootstrapResponse(
+        ok=True,
+        admin_exists=True,
+        created_user_id=user.id,
+        message="Admin user created successfully.",
     )
-    roles: List[str] = [r[0] for r in result.all()]
-    return {
-        "email": current_user.email,
-        "roles": roles,
-        "is_admin": getattr(current_user, "is_admin", False),
-    }
