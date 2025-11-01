@@ -66,6 +66,11 @@ class Settings(BaseSettings):
             return [x.strip() for x in v.split(",") if x.strip()]
         raise TypeError("Неверный тип для CORS_ORIGINS")
 
+    @property
+    def DB_URL(self) -> str:
+        """Совместимость со старыми модулями, где используется DB_URL."""
+        return self.DATABASE_URL
+
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
