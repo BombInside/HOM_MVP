@@ -2,7 +2,6 @@ import { configureStore, combineReducers } from "@reduxjs/toolkit";
 import { TypedUseSelectorHook, useDispatch, useSelector } from "react-redux";
 import storage from "redux-persist/lib/storage";
 import { persistReducer, persistStore } from "redux-persist";
-import thunk from "redux-thunk";
 
 import authReducer from "./slices/authSlice";
 import localeReducer from "./slices/localeSlice";
@@ -26,8 +25,8 @@ export const store = configureStore({
   reducer: persistedReducer,
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      serializableCheck: false,
-    }).concat(thunk),
+      serializableCheck: false, // важно при использовании redux-persist
+    }),
 });
 
 export const persistor = persistStore(store);
