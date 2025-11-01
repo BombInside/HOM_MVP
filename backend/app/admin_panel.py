@@ -27,18 +27,15 @@ class BootstrapResponse(BaseModel):
     admin_exists: bool
 
 
-async def _admin_exists(session: AsyncSession) -> bool:
-    q = await session.execute(select(Role).where(Role.name == "admin"))
-    admin_role = q.scalar_one_or_none()
-    if not admin_role:
-        return False
-    q = await session.execute(
-        select(User.id)
+async def _admin_exists(session):
+    """Проверяет, существует ли пользователь с ролью 'admin'."""
+    q = (
+        select(User)
         .join(UserRoleLink, UserRoleLink.user_id == User.id)
-        .where(UserRoleLink.c.role_id == admin_role.id)
-        .limit(1)
+        .join(Role, Role.id == UserRoleLink.role_id)
+        .where(Role.name == "admin")
     )
-    return q.first() is not None
+    return await session.scalar(q)
 
 
 @router.get("/bootstrap", response_model=BootstrapResponse)
