@@ -8,19 +8,26 @@ from passlib.context import CryptContext
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+def _truncate_for_bcrypt(s: str) -> str:
+    """bcrypt учитывает максимум ~72 байта. Чтобы избежать ValueError из бэкенда,
+    безопасно обрежем ввод по байтам UTF‑8.
+    """
+    b = s.encode("utf-8")
+    if len(b) > 72:
+        b = b[:72]
+        try:
+            return b.decode("utf-8")
+        except UnicodeDecodeError:
+            # обрежем до ближайшей валидной границы
+            return b.decode("utf-8", errors="ignore")
+    return s
+
+
 def hash_password(plain_password: str) -> str:
-    """
-    Хэширует пароль пользователя, предварительно обрезая до 72 байт
-    (ограничение алгоритма bcrypt).
-    """
-    # Обрезаем до 72 байт — чтобы не было ValueError при длинных/UTF-8 паролях
-    safe_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.hash(safe_password)
+    """Возвращает bcrypt-хеш пароля."""
+    return pwd_context.hash(_truncate_for_bcrypt(plain_password))
 
 
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """
-    Проверяет пароль, применяя то же ограничение 72 байта.
-    """
-    safe_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
-    return pwd_context.verify(safe_password, hashed_password)
+def verify_password(plain_password: str, password_hash: str) -> bool:
+    """Проверяет соответствие пароля и хеша."""
+    return pwd_context.verify(_truncate_for_bcrypt(plain_password), password_hash)
