@@ -9,7 +9,7 @@ import api from "../../api";
 const AdminBootstrap = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
-  const [exists, setExists] = useState(false);
+  const [exists, setExists] = useState<boolean | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
@@ -20,14 +20,18 @@ const AdminBootstrap = () => {
     let isMounted = true;
     (async () => {
       try {
-        // Backend возвращает: { ok: true, admin_exists: boolean } или { admin_exists: boolean }
-        const { data } = await api.get("/adminpanel/bootstrap");
-        const adminExists = !!(data?.admin_exists ?? data?.adminExists);
+        // ⚙️ Временно убираем авторизацию из запроса
+        const { data } = await api.get("/adminpanel/bootstrap", {
+          headers: { Authorization: "" },
+        });
         if (!isMounted) return;
+        const adminExists = Boolean(data?.admin_exists);
         setExists(adminExists);
       } catch (e) {
-        // Если статус недоступен — всё равно позволим попытаться создать
-        setExists(false);
+        // Если API вернул ошибку — всё равно разрешаем создание админа
+        if (isMounted) {
+          setExists(false);
+        }
       } finally {
         if (isMounted) setLoading(false);
       }
@@ -35,7 +39,7 @@ const AdminBootstrap = () => {
     return () => {
       isMounted = false;
     };
-  }, [navigate]);
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -48,14 +52,13 @@ const AdminBootstrap = () => {
     }
 
     try {
-      // Backend ожидает: { email, password, confirm_password }
       const { data } = await api.post("/adminpanel/bootstrap", {
         email,
         password,
         confirm_password: password,
       });
-      const ok = !!(data?.ok ?? data?.success ?? data?.message);
-      if (ok) {
+
+      if (data?.ok || data?.success) {
         setSuccess(data?.message || "Администратор успешно создан");
         setTimeout(() => navigate("/login"), 1200);
       } else {
@@ -73,7 +76,8 @@ const AdminBootstrap = () => {
 
   if (loading) return <div className="p-6 text-center">Загрузка...</div>;
 
-  if (exists)
+  // ✅ Если админ существует, показываем подсказку
+  if (exists === true)
     return (
       <div className="p-6">
         <div className="max-w-xl mx-auto bg-white dark:bg-gray-800 rounded shadow p-6">
@@ -91,10 +95,13 @@ const AdminBootstrap = () => {
       </div>
     );
 
+  // ✅ Если админа нет — показываем форму
   return (
-    <div className="p-6">
-      <div className="max-w-xl mx-auto bg-white dark:bg-gray-800 rounded shadow p-6">
-        <h1 className="text-xl font-semibold mb-4">Создание администратора</h1>
+    <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+      <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+        <h1 className="text-2xl font-semibold mb-4 text-center">
+          Создание администратора
+        </h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input
             type="email"
@@ -120,14 +127,12 @@ const AdminBootstrap = () => {
             onChange={(e) => setConfirm(e.target.value)}
             className="px-3 py-2 rounded border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-900"
           />
-
           <button
             type="submit"
             className="mt-2 px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 transition-colors"
           >
             Создать администратора
           </button>
-
           {error && <div className="text-red-500 text-sm text-center">{error}</div>}
           {success && <div className="text-green-500 text-sm text-center">{success}</div>}
         </form>
