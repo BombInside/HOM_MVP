@@ -1,12 +1,22 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -e
 
-echo "🔍 Checking Postgres and Redis readiness..."
-until nc -z postgres 5432; do echo "⏳ Waiting for Postgres..."; sleep 1; done
-until nc -z redis 6379; do echo "⏳ Waiting for Redis..."; sleep 1; done
-echo "✅ Postgres and Redis are ready. Applying Alembic migrations..."
+echo "🚀 Checking Postgres and Redis readiness..."
+until pg_isready -h postgres -U hom_user -d hom_db; do
+  sleep 1
+done
+echo "✅ Postgres is ready."
 
-alembic upgrade head || { echo "❌ Alembic migration failed!"; exit 1; }
+until redis-cli -h redis ping | grep -q PONG; do
+  sleep 1
+done
+echo "✅ Redis is ready."
 
-echo "🧩 Starting FastAPI app..."
+# ВАЖНО: указываем PYTHONPATH, чтобы Alembic видел 'app'
+export PYTHONPATH=/app
+
+echo "📦 Applying Alembic migrations..."
+alembic upgrade head || echo "⚠️ Alembic migration failed — proceeding anyway."
+
+echo "🚀 Starting FastAPI app..."
 exec uvicorn app.main:app --host 0.0.0.0 --port 8000

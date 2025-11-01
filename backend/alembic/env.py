@@ -1,11 +1,20 @@
+import os
+import sys
 import asyncio
 from logging.config import fileConfig
 
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel import SQLModel
-
 from alembic import context
+
+# ----------------------------------------------------
+# Добавляем пути, чтобы Alembic видел приложение внутри Docker
+# ----------------------------------------------------
+BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.append(BASE_DIR)
+sys.path.append(os.path.join(BASE_DIR, "app"))
+
 from app.config import settings
 from app.models import *  # noqa: F401, F403 — импортируем все модели, чтобы Alembic видел таблицы
 
