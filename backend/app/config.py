@@ -31,7 +31,8 @@ class Settings(BaseSettings):
     ADMIN_BOOTSTRAP_PATH: str = "/adminpanel/bootstrap"
 
     # CORS (строгий список, по умолчанию пустой)
-    CORS_ORIGINS: List[AnyHttpUrl] = []
+    #CORS_ORIGINS: List[AnyHttpUrl] = []
+    CORS_ORIGINS: Union[List[AnyHttpUrl], str] = []
 
     # Логи
     LOG_JSON: bool = True
@@ -40,25 +41,31 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def _coerce_cors(cls, v):
-        """
-        Универсальный парсер CORS_ORIGINS:
-        - принимает JSON-массив (строка вида '["url1","url2"]')
-        - принимает строку через запятую ('url1,url2')
-        - принимает список
-        """
-        if not v:
-            return []
-        if isinstance(v, str):
-            v = v.strip()
-            # JSON-массив (например: '["http://a","http://b"]')
-            if v.startswith("["):
-                try:
-                    return json.loads(v)
-                except json.JSONDecodeError:
-                    raise ValueError("Неверный формат CORS_ORIGINS (JSON parse error)")
+        @field_validator("CORS_ORIGINS", mode="before")
+        @classmethod
+        def parse_cors_origins(cls, v):
+            """
+            Универсальный парсер CORS_ORIGINS:
+            поддерживает строку, CSV, JSON-массив и список.
+            """
+            if not v:
+                return []
+            if isinstance(v, list):
+                return v
+            if isinstance(v, str):
+                v = v.strip()
+                # JSON-массив, например: '["http://a","http://b"]'
+                if v.startswith("["):
+                    try:
+                        return json.loads(v)
+                    except json.JSONDecodeError:
+                        raise ValueError("Неверный формат JSON в CORS_ORIGINS")
+                # одиночный URL без запятых
+                if v.startswith("http") and "," not in v:
+                    return [v]
+                # список через запятую
+                return [x.strip() for x in v.split(",") if x.strip()]
+            raise TypeError("Неверный тип для CORS_ORIGINS")
             # одиночный URL без запятых
             if v.startswith("http") and "," not in v:
                 return [v]
