@@ -6,8 +6,6 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || "/",
   withCredentials: true,
 });
-export default api;
-export { api };
 
 api.interceptors.request.use((config) => {
   const token = store.getState().auth.accessToken;
@@ -29,3 +27,4 @@ api.interceptors.response.use(
 );
 
 export default api;
+export { api };

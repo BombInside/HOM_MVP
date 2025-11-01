@@ -1,6 +1,6 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-//import { api } from "../../api";
+import api from "../../api";  
 
 /**
  * Страница первичного создания администратора.
