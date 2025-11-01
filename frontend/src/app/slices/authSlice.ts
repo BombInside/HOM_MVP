@@ -1,4 +1,4 @@
-import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
+import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../../api";
 
 type User = {
@@ -26,7 +26,7 @@ export const login = createAsyncThunk(
   async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
     try {
       const { data } = await api.post("/auth/login", { email, password });
-      localStorage.setItem("token", data.access_token);
+      if (data?.access_token) localStorage.setItem("token", data.access_token);
       return data;
     } catch (err: any) {
       const msg =
@@ -43,46 +43,53 @@ export const fetchCurrentUser = createAsyncThunk("auth/me", async (_, { rejectWi
   try {
     const { data } = await api.get("/auth/me");
     return data;
-  } catch (err: any) {
+  } catch (err) {
     localStorage.removeItem("token");
     return rejectWithValue("Unauthorized");
   }
 });
 
-const authSlice = createSlice({
+const slice = createSlice({
   name: "auth",
   initialState,
   reducers: {
     logout(state) {
       state.accessToken = null;
       state.user = null;
+      state.error = null;
+      state.loading = false;
       localStorage.removeItem("token");
     },
   },
   extraReducers: (builder) => {
     builder
-      .addCase(login.pending, (state) => {
-        state.loading = true;
-        state.error = null;
+      .addCase(login.pending, (s) => {
+        s.loading = true;
+        s.error = null;
       })
-      .addCase(login.fulfilled, (state, action: any) => {
-        state.loading = false;
-        state.accessToken = action.payload.access_token;
-        state.user = action.payload.user;
+      .addCase(login.fulfilled, (s, action: any) => {
+        s.loading = false;
+        s.error = null;
+        s.accessToken = action.payload?.access_token || null;
+        s.user = action.payload?.user || null;
       })
-      .addCase(login.rejected, (state, action: any) => {
-        state.loading = false;
-        state.error = action.payload || "Login failed";
+      .addCase(login.rejected, (s, action: any) => {
+        s.loading = false;
+        s.error = action.payload || "Login failed";
       })
-      .addCase(fetchCurrentUser.fulfilled, (state, action: any) => {
-        state.user = action.payload;
+      .addCase(fetchCurrentUser.fulfilled, (s, action: any) => {
+        s.user = action.payload || null;
+        if (s.accessToken == null) {
+          // если пришёл user, а токена нет — ничего не делаем;
+          // (обычно сюда попадём только с токеном)
+        }
       })
-      .addCase(fetchCurrentUser.rejected, (state) => {
-        state.user = null;
-        state.accessToken = null;
+      .addCase(fetchCurrentUser.rejected, (s) => {
+        s.user = null;
+        s.accessToken = null;
       });
   },
 });
 
-export const { logout } = authSlice.actions;
-export default authSlice.reducer;
+export const { logout } = slice.actions;
+export default slice.reducer;

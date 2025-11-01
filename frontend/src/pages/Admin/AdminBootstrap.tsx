@@ -4,7 +4,7 @@ import api from "../../api";
 
 /**
  * Страница первичного создания администратора.
- * Отображается только если администратора ещё нет.
+ * Публичная: должна работать без токена.
  */
 const AdminBootstrap = () => {
   const navigate = useNavigate();
@@ -17,27 +17,23 @@ const AdminBootstrap = () => {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
     (async () => {
       try {
-        // ⚙️ Временно убираем авторизацию из запроса
+        // ВАЖНО: без Authorization — публичный запрос
         const { data } = await api.get("/adminpanel/bootstrap", {
           headers: { Authorization: "" },
         });
-        if (!isMounted) return;
-        const adminExists = Boolean(data?.admin_exists);
-        setExists(adminExists);
-      } catch (e) {
-        // Если API вернул ошибку — всё равно разрешаем создание админа
-        if (isMounted) {
-          setExists(false);
-        }
+        if (!mounted) return;
+        setExists(Boolean(data?.admin_exists));
+      } catch {
+        if (mounted) setExists(false);
       } finally {
-        if (isMounted) setLoading(false);
+        if (mounted) setLoading(false);
       }
     })();
     return () => {
-      isMounted = false;
+      mounted = false;
     };
   }, []);
 
@@ -57,7 +53,6 @@ const AdminBootstrap = () => {
         password,
         confirm_password: password,
       });
-
       if (data?.ok || data?.success) {
         setSuccess(data?.message || "Администратор успешно создан");
         setTimeout(() => navigate("/login"), 1200);
@@ -76,11 +71,10 @@ const AdminBootstrap = () => {
 
   if (loading) return <div className="p-6 text-center">Загрузка...</div>;
 
-  // ✅ Если админ существует, показываем подсказку
   if (exists === true)
     return (
-      <div className="p-6">
-        <div className="max-w-xl mx-auto bg-white dark:bg-gray-800 rounded shadow p-6">
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
+        <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow p-6">
           <h1 className="text-xl font-semibold mb-3">Администратор уже создан</h1>
           <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">
             Перейдите на страницу входа, чтобы авторизоваться.
@@ -95,13 +89,10 @@ const AdminBootstrap = () => {
       </div>
     );
 
-  // ✅ Если админа нет — показываем форму
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-100 dark:bg-gray-900">
       <div className="w-full max-w-md bg-white dark:bg-gray-800 rounded-xl shadow p-6">
-        <h1 className="text-2xl font-semibold mb-4 text-center">
-          Создание администратора
-        </h1>
+        <h1 className="text-xl font-semibold mb-4 text-center">Создание администратора</h1>
         <form onSubmit={handleSubmit} className="flex flex-col gap-3">
           <input
             type="email"

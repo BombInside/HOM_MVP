@@ -1,4 +1,4 @@
-import { useAppSelector, useAppDispatch } from "../app/store";
+import { useAppDispatch, useAppSelector } from "../app/store";
 import { logout } from "../app/slices/authSlice";
 
 const Topbar = () => {

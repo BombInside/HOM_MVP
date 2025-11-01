@@ -1,30 +1,33 @@
+// Унифицированный axios-инстанс для проекта.
+// ВАЖНО: публичные запросы (например /adminpanel/bootstrap GET) можно вызвать без токена:
+// api.get(url, { headers: { Authorization: "" } })
+
 import axios from "axios";
-import { store } from "../app/store";
-import { logout } from "../app/slices/authSlice";
+
+const baseURL =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
+  (typeof window !== "undefined" ? window.location.origin : "http://localhost:8000");
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "/",
-  withCredentials: true,
+  baseURL,
+  withCredentials: false,
 });
 
+// Добавляем токен, если он есть в localStorage
 api.interceptors.request.use((config) => {
-  const token = store.getState().auth.accessToken;
+  // если явно передали Authorization: "" — не подставляем токен
+  if (config.headers && "Authorization" in config.headers && config.headers.Authorization === "") {
+    return config;
+  }
+
+  const token = localStorage.getItem("token");
   if (token) {
-    config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${token}`;
+    config.headers = {
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    };
   }
   return config;
 });
 
-api.interceptors.response.use(
-  (resp) => resp,
-  (err) => {
-    if (err?.response?.status === 401) {
-      store.dispatch(logout());
-    }
-    return Promise.reject(err);
-  }
-);
-
 export default api;
-export { api };
