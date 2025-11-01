@@ -4,8 +4,11 @@ WORKDIR /app
 
 # system deps
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    netcat-openbsd dos2unix build-essential && \
-    rm -rf /var/lib/apt/lists/*
+    netcat-openbsd \
+    dos2unix \
+    build-essential \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
 
 # python deps
 COPY requirements.txt /app/requirements.txt

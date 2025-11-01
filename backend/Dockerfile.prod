@@ -8,7 +8,10 @@ WORKDIR /app
 
 # системные зависимости
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    netcat-traditional curl dos2unix build-essential \
+    netcat-openbsd \
+    dos2unix \
+    build-essential \
+    postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
 # зависимости
