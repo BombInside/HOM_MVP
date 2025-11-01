@@ -1,4 +1,4 @@
-import Dashboard from "./Dashboard";
+import Dashboard from "./Admin/Dashboard";
 
 export default function AdminPanel() {
   // в будущем можно добавить проверку логина администратора (cookie/JWT)

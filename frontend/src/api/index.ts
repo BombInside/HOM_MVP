@@ -15,19 +15,21 @@ const api = axios.create({
 
 // Добавляем токен, если он есть в localStorage
 api.interceptors.request.use((config) => {
-  // если явно передали Authorization: "" — не подставляем токен
+  const token = localStorage.getItem("token");
+
+  // если явно отключен
   if (config.headers && "Authorization" in config.headers && config.headers.Authorization === "") {
     return config;
   }
 
-  const token = localStorage.getItem("token");
   if (token) {
-    config.headers = {
-      ...(config.headers || {}),
-      Authorization: `Bearer ${token}`,
-    };
+    // безопасно задаём заголовок
+    config.headers = config.headers || {};
+    (config.headers as any)["Authorization"] = `Bearer ${token}`;
   }
+
   return config;
 });
+
 
 export default api;
