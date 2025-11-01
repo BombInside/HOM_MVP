@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 from functools import lru_cache
-from typing import List
+from typing import List, Union
 from pydantic_settings import BaseSettings
 from pydantic import AnyHttpUrl, field_validator
 import json
@@ -31,7 +31,6 @@ class Settings(BaseSettings):
     ADMIN_BOOTSTRAP_PATH: str = "/adminpanel/bootstrap"
 
     # CORS (строгий список, по умолчанию пустой)
-    #CORS_ORIGINS: List[AnyHttpUrl] = []
     CORS_ORIGINS: Union[List[AnyHttpUrl], str] = []
 
     # Логи
@@ -41,37 +40,31 @@ class Settings(BaseSettings):
     class Config:
         case_sensitive = True
 
-        @field_validator("CORS_ORIGINS", mode="before")
-        @classmethod
-        def parse_cors_origins(cls, v):
-            """
-            Универсальный парсер CORS_ORIGINS:
-            поддерживает строку, CSV, JSON-массив и список.
-            """
-            if not v:
-                return []
-            if isinstance(v, list):
-                return v
-            if isinstance(v, str):
-                v = v.strip()
-                # JSON-массив, например: '["http://a","http://b"]'
-                if v.startswith("["):
-                    try:
-                        return json.loads(v)
-                    except json.JSONDecodeError:
-                        raise ValueError("Неверный формат JSON в CORS_ORIGINS")
-                # одиночный URL без запятых
-                if v.startswith("http") and "," not in v:
-                    return [v]
-                # список через запятую
-                return [x.strip() for x in v.split(",") if x.strip()]
-            raise TypeError("Неверный тип для CORS_ORIGINS")
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v):
+        """
+        Универсальный парсер CORS_ORIGINS:
+        поддерживает строку, CSV, JSON-массив и список.
+        """
+        if not v:
+            return []
+        if isinstance(v, list):
+            return v
+        if isinstance(v, str):
+            v = v.strip()
+            # JSON-массив, например: '["http://a","http://b"]'
+            if v.startswith("["):
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    raise ValueError("Неверный формат JSON в CORS_ORIGINS")
             # одиночный URL без запятых
             if v.startswith("http") and "," not in v:
                 return [v]
             # список через запятую
             return [x.strip() for x in v.split(",") if x.strip()]
-        return v
+        raise TypeError("Неверный тип для CORS_ORIGINS")
 
 
 @lru_cache(maxsize=1)
