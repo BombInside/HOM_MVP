@@ -10,18 +10,17 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_password(plain_password: str) -> str:
     """
-    Возвращает bcrypt-хеш пароля.
-    :param plain_password: исходный пароль в открытом виде
-    :return: str - безопасный хеш
+    Хэширует пароль пользователя, предварительно обрезая до 72 байт
+    (ограничение алгоритма bcrypt).
     """
-    return pwd_context.hash(plain_password)
+    # Обрезаем до 72 байт — чтобы не было ValueError при длинных/UTF-8 паролях
+    safe_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return pwd_context.hash(safe_password)
 
 
-def verify_password(plain_password: str, password_hash: str) -> bool:
+def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Проверяет соответствие пароля и хеша.
-    :param plain_password: пароль
-    :param password_hash: сохранённый хеш
-    :return: bool
+    Проверяет пароль, применяя то же ограничение 72 байта.
     """
-    return pwd_context.verify(plain_password, password_hash)
+    safe_password = plain_password.encode("utf-8")[:72].decode("utf-8", errors="ignore")
+    return pwd_context.verify(safe_password, hashed_password)
