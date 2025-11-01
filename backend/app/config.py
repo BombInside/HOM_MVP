@@ -1,48 +1,56 @@
+# -*- coding: utf-8 -*-
+"""
+Модуль конфигурации приложения.
+Все секреты и параметры берутся из переменных окружения.
+Дефолтные значения максимально безопасны для разработки и НЕ должны применяться в продакшене.
+"""
+
 from __future__ import annotations
-import json
-from typing import List, Any, Union
-from pydantic import Field, field_validator
+from functools import lru_cache
+from typing import List, Optional
 from pydantic_settings import BaseSettings
+from pydantic import AnyHttpUrl, field_validator
 
 
 class Settings(BaseSettings):
-    APP_ENV: str = Field(default="dev")
-    DB_URL: str = Field(default="postgresql+asyncpg://hom_user:hom_pass@postgres:5432/hom_db")
-    JWT_SECRET: str = Field(default="bc45811b156fdbc0f5e49e0554b56d311c7e3d207392943347e2cb100b49b1e2")
-    JWT_EXPIRE_MIN: int = Field(default=60)
-    REDIS_URL: str = Field(default="redis://redis:6379")
+    # Базовые
+    APP_NAME: str = "HOM Backend"
+    DEBUG: bool = False
+    ENV: str = "stage"
 
-    # 👇 здесь ключевое отличие — Union[str, List[str]]
-    CORS_ORIGINS: Union[str, List[str]] = Field(default_factory=lambda: ["http://localhost:5173"])
+    # БД
+    DATABASE_URL: str
+
+    # JWT / Session
+    JWT_SECRET: str
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MIN: int = 60  # срок жизни access-токена в минутах
+
+    # Админ-бустрап (одноразовая форма создания первого администратора)
+    ADMIN_BOOTSTRAP_PATH: str = "/adminpanel/bootstrap"
+
+    # CORS (строгий список, по умолчанию пустой; фронтенд должен явно указать домены в .env)
+    CORS_ORIGINS: List[AnyHttpUrl] = []
+
+    # Логи
+    LOG_JSON: bool = True
+    LOG_LEVEL: str = "INFO"
+
+    # Безопасность cookies/CSRF в админ-панели можно докрутить позже
+    class Config:
+        case_sensitive = True
 
     @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: Any) -> List[str]:
-        """Поддерживает CORS_ORIGINS в форматах:
-        - JSON: ["https://a.com", "https://b.com"]
-        - CSV:  https://a.com,https://b.com
-        - Один URL: https://a.com
-        """
+    def _coerce_cors(cls, v):
+        # Позволяем строку через запятую -> список
         if not v:
-            return ["http://localhost:5173"]
-
-        if isinstance(v, list):
-            return v
-
+            return []
         if isinstance(v, str):
-            v = v.strip()
-            if v.startswith("["):
-                try:
-                    return json.loads(v)
-                except json.JSONDecodeError:
-                    pass
             return [x.strip() for x in v.split(",") if x.strip()]
-
-        return ["http://localhost:5173"]
-
-    class Config:
-        env_file = ".env"
-        extra = "ignore"
+        return v
 
 
-settings = Settings()
+@lru_cache(maxsize=1)
+def get_settings() -> Settings:
+    """Кэшированный доступ к настройкам, чтобы не пересоздавать объект Settings."""
+    return Settings()  # type: ignore[misc]

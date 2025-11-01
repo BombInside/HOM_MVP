@@ -1,169 +1,61 @@
+# -*- coding: utf-8 -*-
+"""
+Базовые модели пользователей/ролей/прав для RBAC.
+"""
+from __future__ import annotations
 from typing import Optional, List
 from datetime import datetime
-from sqlmodel import SQLModel, Field, Relationship
+from sqlmodel import SQLModel, Field, Relationship, UniqueConstraint
 
-
-# ==========================
-#  Базовые связи Many-to-Many
-# ==========================
 
 class UserRoleLink(SQLModel, table=True):
-    """Связь многие-ко-многим между пользователями и ролями."""
-    user_id: Optional[int] = Field(default=None, foreign_key="user.id", primary_key=True)
-    role_id: Optional[int] = Field(default=None, foreign_key="role.id", primary_key=True)
+    """Промежуточная таблица many-to-many между пользователем и ролью."""
+    __tablename__ = "user_role_link"
+    user_id: int = Field(foreign_key="user.id", primary_key=True)
+    role_id: int = Field(foreign_key="role.id", primary_key=True)
 
 
 class RolePermissionLink(SQLModel, table=True):
-    """Связь многие-ко-многим между ролями и разрешениями."""
-    role_id: Optional[int] = Field(default=None, foreign_key="role.id", primary_key=True)
-    permission_id: Optional[int] = Field(default=None, foreign_key="permission.id", primary_key=True)
+    """Промежуточная таблица many-to-many между ролью и правом."""
+    __tablename__ = "role_permission_link"
+    role_id: int = Field(foreign_key="role.id", primary_key=True)
+    permission_id: int = Field(foreign_key="permission.id", primary_key=True)
 
-
-# ==========================
-#  Модель Permission (права)
-# ==========================
-
-class Permission(SQLModel, table=True):
-    """Право доступа (Permission)."""
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, unique=True)
-    description: Optional[str] = None
-
-    roles: List["Role"] = Relationship(back_populates="permissions", link_model=RolePermissionLink)
-
-
-# ==========================
-#  Модель Role (роль)
-# ==========================
-
-class Role(SQLModel, table=True):
-    """Роль в системе (admin, operator, viewer, developer)."""
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, unique=True)
-    description: Optional[str] = None
-
-    users: List["User"] = Relationship(back_populates="roles", link_model=UserRoleLink)
-    permissions: List[Permission] = Relationship(back_populates="roles", link_model=RolePermissionLink)
-
-
-# ==========================
-#  Модель User (пользователь)
-# ==========================
 
 class User(SQLModel, table=True):
     """Пользователь системы."""
+    __tablename__ = "user"
+    __table_args__ = (UniqueConstraint("email", name="uq_user_email"),)
+
     id: Optional[int] = Field(default=None, primary_key=True)
-    email: str = Field(index=True, unique=True)
-    hashed_password: str
-    full_name: Optional[str] = None
-    is_active: bool = Field(default=True)
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    email: str = Field(index=True, nullable=False)
+    password_hash: str = Field(nullable=False)
+    is_active: bool = Field(default=True, nullable=False)
+    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
-    roles: List[Role] = Relationship(back_populates="users", link_model=UserRoleLink)
+    roles: List["Role"] = Relationship(back_populates="users", link_model=UserRoleLink)
 
 
-# ==========================
-#  Модель Line
-# ==========================
+class Role(SQLModel, table=True):
+    """Роль пользователя (набор прав)."""
+    __tablename__ = "role"
+    __table_args__ = (UniqueConstraint("name", name="uq_role_name"),)
 
-class Line(SQLModel, table=True):
-    """
-    Производственная линия (Line).
-    Связана с машинами: одна линия может включать несколько машин.
-    """
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, unique=True)
-    description: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    name: str = Field(index=True, nullable=False)
+    description: Optional[str] = Field(default=None)
 
-    machines: List["Machine"] = Relationship(back_populates="line")
+    users: List[User] = Relationship(back_populates="roles", link_model=UserRoleLink)
+    permissions: List["Permission"] = Relationship(back_populates="roles", link_model=RolePermissionLink)
 
 
-# ==========================
-#  Модель Machine
-# ==========================
+class Permission(SQLModel, table=True):
+    """Единичное право (действие на сущности)."""
+    __tablename__ = "permission"
+    __table_args__ = (UniqueConstraint("code", name="uq_permission_code"),)
 
-class Machine(SQLModel, table=True):
-    """Оборудование или устройство на линии."""
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, unique=True)
-    status: Optional[str] = None
-    created_at: datetime = Field(default_factory=datetime.utcnow)
+    code: str = Field(index=True, nullable=False)  # например: machines.read, machines.write
+    description: Optional[str] = Field(default=None)
 
-    line_id: Optional[int] = Field(default=None, foreign_key="line.id")
-    line: Optional[Line] = Relationship(back_populates="machines")
-
-
-# ==========================
-#  Служебный класс RBACSeed
-# ==========================
-
-class RBACSeed:
-    """Создание стандартных ролей и разрешений. Безопасно при повторных вызовах."""
-    DEFAULT_ROLES = {
-        "admin": {
-            "description": "Полный доступ ко всем функциям системы",
-            "permissions": ["manage_users", "manage_roles", "view_dashboard", "edit_settings", "view_logs"],
-        },
-        "operator": {
-            "description": "Управление задачами без доступа к настройкам",
-            "permissions": ["view_dashboard", "manage_tasks", "view_logs"],
-        },
-        "viewer": {
-            "description": "Только чтение данных",
-            "permissions": ["view_dashboard", "view_logs"],
-        },
-        "developer": {
-            "description": "Доступ к API и DevOps-инструментам",
-            "permissions": ["view_dashboard", "use_api", "deploy_code"],
-        },
-    }
-
-    @classmethod
-    async def seed(cls, session) -> None:
-        from sqlalchemy import select
-
-        result = await session.execute(select(Role))
-        existing_roles = result.scalars().all()
-        if existing_roles:
-            print("🔁 RBAC роли уже существуют, пропускаем инициализацию.")
-            return
-
-        print("🚀 Создание стандартных ролей и разрешений...")
-
-        permissions_map: dict[str, Permission] = {}
-        for role_data in cls.DEFAULT_ROLES.values():
-            for perm_name in role_data["permissions"]:
-                if perm_name not in permissions_map:
-                    perm = Permission(name=perm_name, description=f"Permission: {perm_name}")
-                    session.add(perm)
-                    permissions_map[perm_name] = perm
-
-        await session.commit()
-
-        result = await session.execute(select(Permission))
-        permissions_by_name = {p.name: p for p in result.scalars().all()}
-
-        for role_name, role_data in cls.DEFAULT_ROLES.items():
-            role = Role(name=role_name, description=role_data["description"])
-            role.permissions = [permissions_by_name[p] for p in role_data["permissions"]]
-            session.add(role)
-
-        await session.commit()
-        print("✅ RBAC роли и разрешения успешно созданы.")
-
-
-# ==========================
-#  Экспорт моделей
-# ==========================
-
-__all__ = [
-    "User",
-    "Role",
-    "Permission",
-    "Machine",
-    "Line",
-    "UserRoleLink",
-    "RolePermissionLink",
-    "RBACSeed",
-]
+    roles: List[Role] = Relationship(back_populates="permissions", link_model=RolePermissionLink)

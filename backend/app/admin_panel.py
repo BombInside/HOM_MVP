@@ -1,273 +1,237 @@
-# mypy: ignore-errors
-from fastapi import (
-    APIRouter,
-    Request,
-    Depends,
-    Form,
-    status,
-    HTTPException,
-)
-from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+# -*- coding: utf-8 -*-
+"""
+Маршруты админ-панели:
+- Одноразовый bootstrap для создания первого администратора
+- Редактор ролей и прав
+Примечание: для простоты используем JSON формы (application/json) и минимальный HTML вывод.
+"""
+from __future__ import annotations
+from typing import List, Optional
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, true
-from typing import Optional, Sequence, List, Callable, Awaitable, Any
-import hashlib
 
-from app.db import get_session
-from app.models import User, Role, Permission, RBACSeed
+from .config import get_settings
+from .db import get_session
+from .models import User, Role, Permission, RolePermissionLink, UserRoleLink
+from .security import hash_password
+from .auth import get_current_user
 
-
-router = APIRouter(prefix="/adminpanel", tags=["Admin Panel"])
-templates = Jinja2Templates(directory="app/templates")
-
-
-# ======================================================
-# Утилиты
-# ======================================================
-
-def hash_password(password: str) -> str:
-    """Хеширование пароля (демо, заменить на bcrypt в продакшене)."""
-    return hashlib.sha256(password.encode("utf-8")).hexdigest()
+router = APIRouter(tags=["admin-panel"])
+settings = get_settings()
 
 
-async def admin_exists(session: AsyncSession) -> bool:
-    """Проверяет, есть ли хотя бы один пользователь с ролью admin."""
-    result_roles = await session.execute(select(Role))
-    all_roles: Sequence[Role] = result_roles.scalars().all()
-    admin_role_ids = [r.id for r in all_roles if r.name and r.name.lower() in ("admin", "administrator")]
-
-    if not admin_role_ids:
+async def _admin_exists(session: AsyncSession) -> bool:
+    """
+    Проверяет, существует ли в системе хотя бы один пользователь с ролью 'admin'.
+    """
+    q = await session.execute(select(Role).where(Role.name == "admin"))
+    admin_role = q.scalars().first()
+    if not admin_role:
         return False
-
-    result_users = await session.execute(select(User))
-    all_users: Sequence[User] = result_users.scalars().all()
-    for user in all_users:
-        user_roles = getattr(user, "roles", [])
-        if any(r.id and r.id in admin_role_ids for r in user_roles):
-            return True
-    return False
+    # Проверяем связку
+    q2 = await session.execute(select(UserRoleLink).where(UserRoleLink.role_id == admin_role.id))
+    link = q2.first()
+    return link is not None
 
 
-async def get_current_user(request: Request, session: AsyncSession) -> Optional[User]:
-    """Возвращает текущего пользователя из сессии."""
-    user_id = request.session.get("user_id")
-    if not user_id:
-        return None
-    res = await session.execute(select(User).where(User.id == user_id))
-    return res.scalar_one_or_none()
+@router.get("/health", include_in_schema=False)
+async def health() -> dict:
+    """Проверка живости сервиса для healthcheck контейнера/nginx."""
+    return {"status": "ok"}
 
 
-async def get_current_admin(request: Request, session: AsyncSession) -> Optional[User]:
-    """Проверяет, является ли текущий пользователь администратором."""
-    user = await get_current_user(request, session)
-    if not user:
-        return None
-    for role in getattr(user, "roles", []):
-        if role.name and role.name.lower() in ("admin", "administrator"):
-            return user
-    return None
-
-
-# ======================================================
-# RBAC-декоратор
-# ======================================================
-
-def require_permission(permission_name: str) -> Callable[..., Awaitable[User]]:
+@router.get(settings.ADMIN_BOOTSTRAP_PATH, response_class=HTMLResponse, include_in_schema=False)
+async def admin_bootstrap_form(request: Request, session: AsyncSession = Depends(get_session)) -> HTMLResponse:
     """
-    Декоратор-зависимость для проверки разрешений пользователя.
-    Используется как Depends(require_permission("manage_roles")).
+    HTML форма для создания первого администратора.
+    Доступна ТОЛЬКО пока администратора нет.
+    После создания — редирект на '/' и всплывающее сообщение.
     """
-
-    async def dependency(
-        request: Request,
-        session: AsyncSession = Depends(get_session),
-    ) -> User:
-        user = await get_current_user(request, session)
-        if not user:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Не авторизован")
-
-        for role in getattr(user, "roles", []):
-            for perm in getattr(role, "permissions", []):
-                if perm.name == permission_name:
-                    return user
-
-        raise HTTPException(
+    if await _admin_exists(session):
+        # Форма закрыта
+        return HTMLResponse(
+            "<html><body><script>window.location='/'</script>"
+            "<p>Пользователь с правами администратора уже существует. "
+            "Форма бустрапа выключена.</p></body></html>",
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Недостаточно прав: {permission_name}",
         )
-
-    return dependency
-
-
-# ======================================================
-# Bootstrap-страницы
-# ======================================================
-
-@router.get("/bootstrap", response_class=HTMLResponse)
-async def bootstrap_page(request: Request, session: AsyncSession = Depends(get_session)):
-    """Страница для создания администратора, если его нет."""
-    exists = await admin_exists(session)
-    return templates.TemplateResponse(
-        "admin_bootstrap.html",
-        {"request": request, "admin_exists": exists, "admin_created": False},
-    )
+    html = """
+    <html>
+      <body>
+        <h1>Bootstrap администратора</h1>
+        <form method="post" action="{path}">
+          <label>Email: <input type="email" name="email" required/></label><br/>
+          <label>Пароль: <input type="password" name="password" required/></label><br/>
+          <button type="submit">Создать</button>
+        </form>
+      </body>
+    </html>
+    """.format(path=settings.ADMIN_BOOTSTRAP_PATH)
+    return HTMLResponse(html)
 
 
-@router.post("/bootstrap", response_class=HTMLResponse)
-async def bootstrap_action(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
-    session: AsyncSession = Depends(get_session),
-):
-    """Создание первого администратора."""
-    if await admin_exists(session):
-        return templates.TemplateResponse(
-            "admin_bootstrap.html",
-            {"request": request, "admin_exists": True, "admin_created": False},
-        )
+@router.post(settings.ADMIN_BOOTSTRAP_PATH, include_in_schema=False)
+async def admin_bootstrap_post(request: Request, session: AsyncSession = Depends(get_session)) -> RedirectResponse:
+    """
+    Обработчик создания первого администратора.
+    После успешного создания — редирект на '/'.
+    Если админ уже есть — форма закрыта, редирект на '/'.
+    """
+    if await _admin_exists(session):
+        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+        response.set_cookie("toast", "Администратор уже существует", httponly=False)
+        return response
 
-    # ищем или создаём роль администратора
-    condition = and_(true(), Role.name.in_(["admin", "administrator"]))
-    res = await session.execute(select(Role).where(condition))
-    role = res.scalar_one_or_none()
-    if not role:
-        role = Role(name="admin", description="Administrator with full access")
-        session.add(role)
-        await session.commit()
-        await session.refresh(role)
+    form = await request.form()
+    email = str(form.get("email", "")).strip().lower()
+    password = str(form.get("password", "")).strip()
+    if not email or not password:
+        raise HTTPException(status_code=400, detail="Email и пароль обязательны")
+
+    # создаём роль admin если нет
+    q = await session.execute(select(Role).where(Role.name == "admin"))
+    admin_role = q.scalars().first()
+    if not admin_role:
+        admin_role = Role(name="admin", description="Полные права")
+        session.add(admin_role)
+        await session.flush()
 
     # создаём пользователя
-    user = User(email=email, hashed_password=hash_password(password))
-    user.roles.append(role)
+    user = User(email=email, password_hash=hash_password(password), is_active=True)
     session.add(user)
+    await session.flush()
+
+    # линкуем роль
+    link = UserRoleLink(user_id=user.id, role_id=admin_role.id)  # type: ignore[arg-type]
+    session.add(link)
     await session.commit()
 
-    return templates.TemplateResponse(
-        "admin_bootstrap.html",
-        {"request": request, "admin_exists": True, "admin_created": True},
-    )
+    # редирект на главную и set-cookie для всплывашки
+    response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
+    response.set_cookie("toast", "Администратор создан", httponly=False)
+    return response
 
 
-# ======================================================
-# Авторизация и выход
-# ======================================================
+# -------------------- Редактор ролей и прав --------------------
 
-@router.get("/login", response_class=HTMLResponse)
-async def login_page(request: Request):
-    """Страница входа администратора."""
-    error = request.query_params.get("err")
-    return templates.TemplateResponse("admin_login.html", {"request": request, "error": error})
+def _require_admin(user: User) -> None:
+    """Проверяем, что у пользователя есть роль admin."""
+    if not any(r.name == "admin" for r in user.roles):
+        raise HTTPException(status_code=403, detail="Admin role required")
 
 
-@router.post("/login")
-async def login_action(
-    request: Request,
-    email: str = Form(...),
-    password: str = Form(...),
-    session: AsyncSession = Depends(get_session),
-):
-    """Авторизация пользователя с проверкой ролей."""
-    res = await session.execute(select(User).where(User.email == email))
-    user = res.scalar_one_or_none()
-    if not user or user.hashed_password != hash_password(password):
-        return RedirectResponse("/adminpanel/login?err=Неверный+логин+или+пароль", status_code=status.HTTP_303_SEE_OTHER)
-
-    roles = getattr(user, "roles", [])
-    if not any(r.name and r.name.lower() in ("admin", "administrator") for r in roles):
-        return RedirectResponse("/adminpanel/login?err=Недостаточно+прав", status_code=status.HTTP_303_SEE_OTHER)
-
-    request.session["user_id"] = user.id
-    return RedirectResponse("/adminpanel", status_code=status.HTTP_303_SEE_OTHER)
-
-
-@router.get("/logout")
-async def logout(request: Request):
-    """Выход из панели администратора."""
-    request.session.clear()
-    return RedirectResponse("/adminpanel/login", status_code=status.HTTP_303_SEE_OTHER)
-
-
-# ======================================================
-# Главная страница панели
-# ======================================================
-
-@router.get("/", response_class=HTMLResponse)
-async def admin_home(request: Request, session: AsyncSession = Depends(get_session)):
-    """Главная страница панели администратора."""
-    user = await get_current_admin(request, session)
-    if not user:
-        return RedirectResponse("/adminpanel/login", status_code=status.HTTP_303_SEE_OTHER)
-    return templates.TemplateResponse("admin_home.html", {"request": request, "user": user})
-
-
-# ======================================================
-# Управление ролями и разрешениями
-# ======================================================
-
-@router.get("/roles", response_class=HTMLResponse)
+@router.get("/adminpanel/roles", response_class=JSONResponse)
 async def list_roles(
-    request: Request,
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(require_permission("manage_roles")),
 ):
-    """Отображает список ролей и разрешений."""
-    res = await session.execute(select(Role))
-    roles: List[Role] = list(res.scalars().all())
-    return templates.TemplateResponse(
-        "admin_roles.html",
-        {"request": request, "roles": roles, "user": user},
-    )
+    """Возвращает список ролей и их прав (для интерфейса редактора)."""
+    _require_admin(user)
+    q = await session.execute(select(Role))
+    roles = q.scalars().all()
+    result = []
+    for role in roles:
+        # грузим права
+        permissions = [p.code for p in role.permissions]
+        result.append({"id": role.id, "name": role.name, "description": role.description, "permissions": permissions})
+    return result
 
 
-@router.get("/roles/new", response_class=HTMLResponse)
-async def new_role_page(
-    request: Request,
-    session: AsyncSession = Depends(get_session),
-    user: User = Depends(require_permission("manage_roles")),
-):
-    """Страница создания новой роли."""
-    res = await session.execute(select(Permission))
-    perms: List[Permission] = list(res.scalars().all())
-    return templates.TemplateResponse(
-        "admin_role_form.html",
-        {"request": request, "permissions": perms, "user": user},
-    )
+class RoleUpsertPayload(dict):
+    """Простая полезная нагрузка для create/update роли (через JSON)."""
+    name: str
+    description: Optional[str]
+    permissions: List[str]
 
 
-@router.post("/roles/new")
+@router.post("/adminpanel/roles", response_class=JSONResponse)
 async def create_role(
-    request: Request,
-    name: str = Form(...),
-    description: str = Form(""),
-    permissions: Optional[List[int]] = Form(default=None),
+    payload: RoleUpsertPayload,
+    user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
-    user: User = Depends(require_permission("manage_roles")),
 ):
-    """Создание новой роли и назначение прав."""
-    from sqlalchemy import cast, Integer
+    """Создаёт новую роль и назначает список permissions (по code)."""
+    _require_admin(user)
+    name = str(payload.get("name", "")).strip()
+    if not name:
+        raise HTTPException(400, "Поле name обязательно")
 
-    new_role = Role(name=name, description=description)
-    if permissions:
-        valid_ids = [int(pid) for pid in permissions if pid]
-        if valid_ids:
-            condition = cast(Permission.id, Integer).in_(valid_ids)
-            res = await session.execute(select(Permission).where(condition))
-            perms: List[Permission] = list(res.scalars().all())
-            new_role.permissions = perms
-    session.add(new_role)
+    role = Role(name=name, description=payload.get("description"))
+    session.add(role)
+    await session.flush()
+
+    # Подтягиваем/создаём permissions по code
+    codes = [c.strip() for c in payload.get("permissions", []) if c.strip()]
+    if codes:
+        # существующие
+        from sqlmodel import or_
+        q = await session.execute(select(Permission).where(Permission.code.in_(codes)))
+        exists = {p.code: p for p in q.scalars().all()}
+        # создаём недостающие
+        to_add = []
+        for code in codes:
+            perm = exists.get(code) or Permission(code=code)
+            if not perm.id:
+                session.add(perm)
+                await session.flush()
+            to_add.append(perm)
+        role.permissions = to_add  # type: ignore[assignment]
+
     await session.commit()
-    return RedirectResponse("/adminpanel/roles", status_code=status.HTTP_303_SEE_OTHER)
+    return {"id": role.id, "name": role.name, "description": role.description, "permissions": [p.code for p in role.permissions]}
 
 
-# ======================================================
-# Автосоздание ролей и прав при запуске
-# ======================================================
+@router.put("/adminpanel/roles/{role_id}", response_class=JSONResponse)
+async def update_role(
+    role_id: int,
+    payload: RoleUpsertPayload,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Обновляет роль и её permissions (список code)."""
+    _require_admin(user)
 
-@router.on_event("startup")
-async def seed_default_roles() -> None:
-    """Создание стандартных ролей и разрешений при первом запуске."""
-    from app.db import async_session
-    async with async_session() as session:
-        await RBACSeed.seed(session)
+    q = await session.execute(select(Role).where(Role.id == role_id))
+    role = q.scalars().first()
+    if not role:
+        raise HTTPException(404, "Роль не найдена")
+
+    role.name = str(payload.get("name", role.name)).strip() or role.name
+    role.description = payload.get("description")
+
+    codes = [c.strip() for c in payload.get("permissions", []) if c.strip()]
+    # Грузим существующие и создаём новые
+    q2 = await session.execute(select(Permission).where(Permission.code.in_(codes)))
+    exists = {p.code: p for p in q2.scalars().all()}
+    new_perms = []
+    for code in codes:
+        perm = exists.get(code) or Permission(code=code)
+        if not perm.id:
+            session.add(perm)
+            await session.flush()
+        new_perms.append(perm)
+    role.permissions = new_perms  # type: ignore[assignment]
+
+    await session.commit()
+    return {"id": role.id, "name": role.name, "description": role.description, "permissions": [p.code for p in role.permissions]}
+
+
+@router.delete("/adminpanel/roles/{role_id}", status_code=204)
+async def delete_role(
+    role_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    """Удаляет роль. Связи с пользователями также удаляются (через каскад внешних ключей на уровне БД)."""
+    _require_admin(user)
+
+    q = await session.execute(select(Role).where(Role.id == role_id))
+    role = q.scalars().first()
+    if not role:
+        raise HTTPException(404, "Роль не найдена")
+
+    await session.delete(role)
+    await session.commit()
+    return JSONResponse(status_code=204, content={})

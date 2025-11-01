@@ -1,81 +1,71 @@
+# -*- coding: utf-8 -*-
+"""
+JWT-аутентификация и зависимости FastAPI.
+"""
 from __future__ import annotations
-
-from typing import Any, Optional, cast
-from datetime import datetime, timedelta
-
-from fastapi import Depends, Header, HTTPException, status
-from jose import JWTError, jwt
-from sqlalchemy import select, literal
+from typing import Optional, Annotated
+from datetime import datetime, timedelta, timezone
+from jose import jwt, JWTError
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .config import settings
+from .config import get_settings
 from .db import get_session
 from .models import User
+from .security import verify_password
 
-ALGORITHM = "HS256"
-
-
-def hash_password(raw: str) -> str:
-    """Возвращает SHA256-хэш пароля."""
-    import hashlib
-
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+settings = get_settings()
+bearer = HTTPBearer(auto_error=False)
 
 
-def verify_password(raw: str, hashed: str) -> bool:
-    """Сравнивает исходный и хэшированный пароли."""
-    return hash_password(raw) == hashed
+def create_access_token(sub: str, expires_minutes: Optional[int] = None) -> str:
+    """
+    Создаёт JWT access-токен.
+    :param sub: subject (обычно user_id или email)
+    :param expires_minutes: срок жизни, мин.
+    """
+    now = datetime.now(tz=timezone.utc)
+    exp_delta = timedelta(minutes=expires_minutes or settings.JWT_EXPIRE_MIN)
+    payload = {"sub": sub, "iat": int(now.timestamp()), "exp": int((now + exp_delta).timestamp())}
+    token = jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
+    return token
 
 
-def create_access_token(payload: dict[str, Any], expires_delta: Optional[int] = None) -> str:
-    """Создает JWT-токен с опциональным временем жизни."""
-    to_encode = payload.copy()
-    jwt_expire = getattr(settings, "JWT_EXPIRE_MIN", 60)
-    expire_minutes: float = float(expires_delta) if expires_delta is not None else float(jwt_expire)
-    expire = datetime.utcnow() + timedelta(minutes=expire_minutes)
-    to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=ALGORITHM)
-
-
-def has_role(user: User, role_name: str) -> bool:
-    """Проверяет, имеет ли пользователь указанную роль."""
-    roles = getattr(user, "roles", []) or []
-    return any(getattr(r, "name", None) == role_name for r in roles)
+async def authenticate_user(session: AsyncSession, email: str, password: str) -> Optional[User]:
+    """
+    Валидирует пользователя по email/паролю.
+    """
+    q = await session.execute(select(User).where(User.email == email))
+    user = q.scalars().first()
+    if not user or not user.is_active:
+        return None
+    if not verify_password(password, user.password_hash):
+        return None
+    return user
 
 
 async def get_current_user(
-    authorization: Optional[str] = Header(default=None),
-    session: AsyncSession = Depends(get_session),
+    creds: Annotated[Optional[HTTPAuthorizationCredentials], Depends(bearer)],
+    session: Annotated[AsyncSession, Depends(get_session)],
 ) -> User:
-    """Возвращает текущего аутентифицированного пользователя по JWT."""
-    if not authorization or not authorization.lower().startswith("bearer "):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Unauthorized"
-        )
-
-    token = authorization.split(" ", 1)[1].strip()
+    """
+    Достает текущего пользователя из JWT Authorization: Bearer ... .
+    """
+    if creds is None or not creds.scheme.lower() == "bearer":
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing credentials")
+    token = creds.credentials
     try:
-        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+        sub = payload.get("sub")
+        if not sub:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+        # sub может быть email или id, в этом шаблоне — email
+        q = await session.execute(select(User).where(User.email == sub))
+        user = q.scalars().first()
+        if not user or not user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not active")
+        return user
     except JWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        )
-
-    user_id = payload.get("sub")
-    if user_id is None:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        )
-
-    # mypy-safe SQLAlchemy select (avoid "bool" typing confusion)
-    condition = cast(Any, User.id == literal(int(user_id)))
-    stmt = select(User).where(condition)
-    result = await session.execute(stmt)
-    user = result.scalars().first()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
-        )
-
-    return user
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")

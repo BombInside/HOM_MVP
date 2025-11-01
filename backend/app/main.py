@@ -1,16 +1,49 @@
+# -*- coding: utf-8 -*-
+"""
+Точка входа FastAPI: монтируем админ-панель, настраиваем CORS и логирование в JSON.
+"""
+from __future__ import annotations
+import logging
+import json as _json
+from typing import List
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
-from app.config import settings
-from app.db import create_db_and_tables, async_session
-from app.models import RBACSeed
-from app.graphql.schema import graphql_app
-from app.admin_panel import router as admin_router
+from .config import get_settings
+from .db import wait_for_db_ready, create_db_and_tables
+from .admin_panel import router as admin_router
 
-app = FastAPI(title="H.O.M Backend")
+settings = get_settings()
+app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 
-# --- Middleware ---
+
+class JsonFormatter(logging.Formatter):
+    """Простой JSON-форматтер логов для продакшена."""
+    def format(self, record: logging.LogRecord) -> str:
+        payload = {
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+            "time": self.formatTime(record, self.datefmt),
+        }
+        if record.exc_info:
+            payload["exc_info"] = self.formatException(record.exc_info)
+        return _json.dumps(payload, ensure_ascii=False)
+
+
+# Логирование
+root = logging.getLogger()
+if settings.LOG_JSON:
+    for h in list(root.handlers):
+        root.removeHandler(h)
+    handler = logging.StreamHandler()
+    handler.setFormatter(JsonFormatter())
+    root.addHandler(handler)
+root.setLevel(getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO))
+
+
+# CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
@@ -18,31 +51,21 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Сессии (секрет должен приходить из JWT_SECRET: это нормально для MVP)
 app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET)
 
-# --- Routers ---
-app.include_router(graphql_app, prefix="/graphql")
+
+# Роуты
 app.include_router(admin_router)
 
 
 @app.on_event("startup")
-async def startup_event():
-    """Создаёт таблицы и применяет RBAC сид."""
-    print("🗄️  Инициализация базы данных...")
+async def on_startup() -> None:
+    await wait_for_db_ready()
     await create_db_and_tables()
 
-    async with async_session() as session:
-        try:
-            print("🚀 Создание стандартных ролей и разрешений...")
-            await RBACSeed.seed(session)
-            print("✅ RBAC роли и разрешения успешно созданы.")
-        except Exception as e:
-            print(f"⚠️ Ошибка при инициализации RBAC: {e}")
 
-    print("✅ Приложение готово к работе.")
-
-
-@app.get("/health")
-async def health_check():
-    """Проверка состояния API."""
-    return {"status": "ok"}
+@app.get("/", include_in_schema=False)
+async def root() -> dict:
+    return {"app": settings.APP_NAME, "env": settings.ENV}
