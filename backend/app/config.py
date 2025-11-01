@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     ENV: str = "stage"
 
     # БД
-    DATABASE_URL: str
+    DATABASE_URL: str = Field(..., alias="DB_URL")
 
     # JWT / Session
     JWT_SECRET: str
