@@ -30,7 +30,7 @@ def upgrade() -> None:
             "user",
             sa.Column("id", sa.Integer, primary_key=True),
             sa.Column("email", sa.String, unique=True, nullable=False),
-            sa.Column("hashed_password", sa.String, nullable=False),
+            sa.Column("password_hash", sa.String(255), nullable=False),
             sa.Column("role_id", sa.Integer, sa.ForeignKey("role.id")),
         )
 
