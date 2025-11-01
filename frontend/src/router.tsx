@@ -6,12 +6,14 @@ import Dashboard from "./pages/Dashboard";
 import RoleEditor from "./pages/Admin/RoleEditor";
 import UserManager from "./pages/Admin/UserManager";
 import { useAppSelector } from "./app/store";
+import AdminBootstrap from "./pages/Admin/AdminBootstrap";
 
 const RequireAuth = ({ children }: { children: JSX.Element }) => {
   const token = useAppSelector((s) => s.auth.accessToken);
   if (!token) return <Navigate to="/login" replace />;
   return children;
 };
+
 
 export const router = createBrowserRouter([
   {
@@ -28,6 +30,7 @@ export const router = createBrowserRouter([
     element: <AuthLayout />,
     children: [
       { path: "/login", element: <Login /> },
+      { path: "/adminpanel/bootstrap", element: <AdminBootstrap /> }, // ✅
     ],
   },
   { path: "*", element: <div className="p-6">Not Found</div> },
