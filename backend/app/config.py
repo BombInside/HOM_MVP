@@ -53,11 +53,16 @@ class Settings(BaseSettings):
             return []
         if isinstance(v, str):
             v = v.strip()
+            # JSON-массив (например: '["http://a","http://b"]')
             if v.startswith("["):
                 try:
                     return json.loads(v)
                 except json.JSONDecodeError:
                     raise ValueError("Неверный формат CORS_ORIGINS (JSON parse error)")
+            # одиночный URL без запятых
+            if v.startswith("http") and "," not in v:
+                return [v]
+            # список через запятую
             return [x.strip() for x in v.split(",") if x.strip()]
         return v
 
