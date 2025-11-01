@@ -5,6 +5,7 @@ from logging.config import fileConfig
 
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
+from sqlmodel import SQLModel
 from alembic import context
 
 # ----------------------------------------------------
@@ -15,8 +16,9 @@ sys.path.append(BASE_DIR)
 sys.path.append(os.path.join(BASE_DIR, "app"))
 
 from app.config import get_settings
-from app.models import Base  # ✅ исправлено
+
 settings = get_settings()
+from app.models import *  # noqa: F401, F403 — импортируем все модели, чтобы Alembic видел таблицы
 
 # ----------------------------------------------------
 # Alembic configuration setup
@@ -27,8 +29,8 @@ config.set_main_option("sqlalchemy.url", settings.DB_URL)
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# ✅ Правильный metadata
-target_metadata = Base.metadata
+# SQLModel metadata — Alembic будет отслеживать все таблицы
+target_metadata = SQLModel.metadata
 
 
 # ----------------------------------------------------
