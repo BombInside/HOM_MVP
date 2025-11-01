@@ -7,7 +7,7 @@ import logging
 import json as _json
 from typing import List
 from fastapi import FastAPI
-from app.api.adminpanel import routes_bootstrap
+#from app.api.adminpanel import routes_bootstrap
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
@@ -18,8 +18,7 @@ from .admin_panel import router as admin_router
 settings = get_settings()
 app = FastAPI(title=settings.APP_NAME, debug=settings.DEBUG)
 
-
-app.include_router(routes_bootstrap.router, prefix="/adminpanel", tags=["AdminPanel"])
+# app.include_router(routes_bootstrap.router, prefix="/adminpanel", tags=["AdminPanel"])
 class JsonFormatter(logging.Formatter):
     """Простой JSON-форматтер логов для продакшена."""
     def format(self, record: logging.LogRecord) -> str:
