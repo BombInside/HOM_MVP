@@ -1,0 +1,23 @@
+{
+  "login": {
+    "title": "Login",
+    "email": "Email",
+    "password": "Password",
+    "submit": "Sign in"
+  },
+  "dashboard": {
+    "title": "Dashboard"
+  },
+  "roles": {
+    "title": "Roles",
+    "create": "Create Role",
+    "name": "Name",
+    "description": "Description",
+    "permissions": "Permissions (comma-separated)",
+    "add": "Add",
+    "save": "Save",
+    "delete": "Delete",
+    "no_roles": "No roles",
+    "loading": "Loading..."
+  }
+}

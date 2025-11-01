@@ -1,0 +1,23 @@
+{
+  "login": {
+    "title": "Logowanie",
+    "email": "Email",
+    "password": "Hasło",
+    "submit": "Zaloguj się"
+  },
+  "dashboard": {
+    "title": "Panel główny"
+  },
+  "roles": {
+    "title": "Role",
+    "create": "Utwórz rolę",
+    "name": "Nazwa",
+    "description": "Opis",
+    "permissions": "Uprawnienia (oddzielone przecinkami)",
+    "add": "Dodaj",
+    "save": "Zapisz",
+    "delete": "Usuń",
+    "no_roles": "Brak ról",
+    "loading": "Ładowanie..."
+  }
+}

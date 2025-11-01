@@ -1,16 +1,9 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Home from "./pages/Home";
-import AdminPanel from "./pages/AdminPanel";
-import Dashboard from "./pages/Dashboard";
+import "./i18n";
+import { RouterProvider } from "react-router-dom";
+import { router } from "./router";
 
-export default function App() {
-  return (
-    <Router>
-      <Routes>
-        <Route path="/" element={<Home />} />
-        <Route path="/admin" element={<AdminPanel />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-      </Routes>
-    </Router>
-  );
+function App() {
+  return <RouterProvider router={router} />;
 }
+
+export default App;
