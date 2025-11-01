@@ -33,7 +33,12 @@ class User(SQLModel, table=True):
     is_active: bool = Field(default=True, nullable=False)
     created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
 
-    roles: List["Role"] = Relationship(back_populates="users", link_model=UserRoleLink)
+    # связи
+    roles: list["Role"] = Relationship(
+        back_populates="users",
+        link_model=UserRoleLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
 
 
 class Role(SQLModel, table=True):
@@ -45,8 +50,18 @@ class Role(SQLModel, table=True):
     name: str = Field(index=True, nullable=False)
     description: Optional[str] = Field(default=None)
 
-    users: List[User] = Relationship(back_populates="roles", link_model=UserRoleLink)
-    permissions: List["Permission"] = Relationship(back_populates="roles", link_model=RolePermissionLink)
+    # связи
+    users: list[User] = Relationship(
+        back_populates="roles",
+        link_model=UserRoleLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
+
+    permissions: list["Permission"] = Relationship(
+        back_populates="roles",
+        link_model=RolePermissionLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
 
 
 class Permission(SQLModel, table=True):
@@ -58,4 +73,9 @@ class Permission(SQLModel, table=True):
     code: str = Field(index=True, nullable=False)  # например: machines.read, machines.write
     description: Optional[str] = Field(default=None)
 
-    roles: List[Role] = Relationship(back_populates="permissions", link_model=RolePermissionLink)
+    # связи
+    roles: list[Role] = Relationship(
+        back_populates="permissions",
+        link_model=RolePermissionLink,
+        sa_relationship_kwargs={"lazy": "selectin"},
+    )
