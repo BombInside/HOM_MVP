@@ -56,7 +56,7 @@ async def _admin_exists(session: AsyncSession) -> bool:
 @router.get("/bootstrap", response_model=BootstrapResponse)
 async def admin_bootstrap_state(session: AsyncSession = Depends(get_session)) -> BootstrapResponse:
     """
-    ✅ Публичный эндпоинт: проверяет, создан ли администратор.
+    Публичный эндпоинт: проверяет, создан ли администратор.
     Не требует авторизации, чтобы можно было создать первого пользователя.
     """
     exists = await _admin_exists(session)
