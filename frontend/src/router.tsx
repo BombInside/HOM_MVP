@@ -5,7 +5,7 @@ import { fetchCurrentUser } from "./app/slices/authSlice";
 
 import Login from "./pages/Login";
 import AdminBootstrap from "./pages/Admin/AdminBootstrap";
-import Dashboard from "./pages/Admin/Dashboard";
+import Dashboard from "./pages/Dashboard";
 
 function ProtectedRoute({ children }: { children: JSX.Element }) {
   const { accessToken, user } = useAppSelector((s) => s.auth);
