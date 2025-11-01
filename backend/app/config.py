@@ -7,9 +7,10 @@
 
 from __future__ import annotations
 from functools import lru_cache
-from typing import List, Optional
+from typing import List
 from pydantic_settings import BaseSettings
 from pydantic import AnyHttpUrl, field_validator
+import json
 
 
 class Settings(BaseSettings):
@@ -29,23 +30,34 @@ class Settings(BaseSettings):
     # Админ-бустрап (одноразовая форма создания первого администратора)
     ADMIN_BOOTSTRAP_PATH: str = "/adminpanel/bootstrap"
 
-    # CORS (строгий список, по умолчанию пустой; фронтенд должен явно указать домены в .env)
+    # CORS (строгий список, по умолчанию пустой)
     CORS_ORIGINS: List[AnyHttpUrl] = []
 
     # Логи
     LOG_JSON: bool = True
     LOG_LEVEL: str = "INFO"
 
-    # Безопасность cookies/CSRF в админ-панели можно докрутить позже
     class Config:
         case_sensitive = True
 
     @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
     def _coerce_cors(cls, v):
-        # Позволяем строку через запятую -> список
+        """
+        Универсальный парсер CORS_ORIGINS:
+        - принимает JSON-массив (строка вида '["url1","url2"]')
+        - принимает строку через запятую ('url1,url2')
+        - принимает список
+        """
         if not v:
             return []
         if isinstance(v, str):
+            v = v.strip()
+            if v.startswith("["):
+                try:
+                    return json.loads(v)
+                except json.JSONDecodeError:
+                    raise ValueError("Неверный формат CORS_ORIGINS (JSON parse error)")
             return [x.strip() for x in v.split(",") if x.strip()]
         return v
 
