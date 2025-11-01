@@ -5,12 +5,14 @@
 - Редактор ролей и прав
 Примечание: для простоты используем JSON формы (application/json) и минимальный HTML вывод.
 """
+
 from __future__ import annotations
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from pydantic import BaseModel  # ✅ добавлено
 
 from .config import get_settings
 from .db import get_session
@@ -30,7 +32,6 @@ async def _admin_exists(session: AsyncSession) -> bool:
     admin_role = q.scalars().first()
     if not admin_role:
         return False
-    # Проверяем связку
     q2 = await session.execute(select(UserRoleLink).where(UserRoleLink.role_id == admin_role.id))
     link = q2.first()
     return link is not None
@@ -50,25 +51,25 @@ async def admin_bootstrap_form(request: Request, session: AsyncSession = Depends
     После создания — редирект на '/' и всплывающее сообщение.
     """
     if await _admin_exists(session):
-        # Форма закрыта
         return HTMLResponse(
             "<html><body><script>window.location='/'</script>"
             "<p>Пользователь с правами администратора уже существует. "
             "Форма бустрапа выключена.</p></body></html>",
             status_code=status.HTTP_403_FORBIDDEN,
         )
-    html = """
+
+    html = f"""
     <html>
       <body>
         <h1>Bootstrap администратора</h1>
-        <form method="post" action="{path}">
+        <form method="post" action="{settings.ADMIN_BOOTSTRAP_PATH}">
           <label>Email: <input type="email" name="email" required/></label><br/>
           <label>Пароль: <input type="password" name="password" required/></label><br/>
           <button type="submit">Создать</button>
         </form>
       </body>
     </html>
-    """.format(path=settings.ADMIN_BOOTSTRAP_PATH)
+    """
     return HTMLResponse(html)
 
 
@@ -108,7 +109,6 @@ async def admin_bootstrap_post(request: Request, session: AsyncSession = Depends
     session.add(link)
     await session.commit()
 
-    # редирект на главную и set-cookie для всплывашки
     response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
     response.set_cookie("toast", "Администратор создан", httponly=False)
     return response
@@ -133,17 +133,16 @@ async def list_roles(
     roles = q.scalars().all()
     result = []
     for role in roles:
-        # грузим права
         permissions = [p.code for p in role.permissions]
         result.append({"id": role.id, "name": role.name, "description": role.description, "permissions": permissions})
     return result
 
 
-class RoleUpsertPayload(dict):
-    """Простая полезная нагрузка для create/update роли (через JSON)."""
+class RoleUpsertPayload(BaseModel):  # ✅ исправлено
+    """Полезная нагрузка для создания или обновления роли."""
     name: str
-    description: Optional[str]
-    permissions: List[str]
+    description: Optional[str] = None
+    permissions: List[str] = []
 
 
 @router.post("/adminpanel/roles", response_class=JSONResponse)
@@ -154,22 +153,19 @@ async def create_role(
 ):
     """Создаёт новую роль и назначает список permissions (по code)."""
     _require_admin(user)
-    name = str(payload.get("name", "")).strip()
+    name = payload.name.strip()
     if not name:
         raise HTTPException(400, "Поле name обязательно")
 
-    role = Role(name=name, description=payload.get("description"))
+    role = Role(name=name, description=payload.description)
     session.add(role)
     await session.flush()
 
-    # Подтягиваем/создаём permissions по code
-    codes = [c.strip() for c in payload.get("permissions", []) if c.strip()]
+    codes = [c.strip() for c in payload.permissions if c.strip()]
     if codes:
-        # существующие
         from sqlmodel import or_
         q = await session.execute(select(Permission).where(Permission.code.in_(codes)))
         exists = {p.code: p for p in q.scalars().all()}
-        # создаём недостающие
         to_add = []
         for code in codes:
             perm = exists.get(code) or Permission(code=code)
@@ -180,7 +176,12 @@ async def create_role(
         role.permissions = to_add  # type: ignore[assignment]
 
     await session.commit()
-    return {"id": role.id, "name": role.name, "description": role.description, "permissions": [p.code for p in role.permissions]}
+    return {
+        "id": role.id,
+        "name": role.name,
+        "description": role.description,
+        "permissions": [p.code for p in role.permissions],
+    }
 
 
 @router.put("/adminpanel/roles/{role_id}", response_class=JSONResponse)
@@ -198,11 +199,10 @@ async def update_role(
     if not role:
         raise HTTPException(404, "Роль не найдена")
 
-    role.name = str(payload.get("name", role.name)).strip() or role.name
-    role.description = payload.get("description")
+    role.name = payload.name.strip() or role.name
+    role.description = payload.description
 
-    codes = [c.strip() for c in payload.get("permissions", []) if c.strip()]
-    # Грузим существующие и создаём новые
+    codes = [c.strip() for c in payload.permissions if c.strip()]
     q2 = await session.execute(select(Permission).where(Permission.code.in_(codes)))
     exists = {p.code: p for p in q2.scalars().all()}
     new_perms = []
@@ -215,7 +215,12 @@ async def update_role(
     role.permissions = new_perms  # type: ignore[assignment]
 
     await session.commit()
-    return {"id": role.id, "name": role.name, "description": role.description, "permissions": [p.code for p in role.permissions]}
+    return {
+        "id": role.id,
+        "name": role.name,
+        "description": role.description,
+        "permissions": [p.code for p in role.permissions],
+    }
 
 
 @router.delete("/adminpanel/roles/{role_id}", status_code=204)
