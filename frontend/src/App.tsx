@@ -1,9 +1,9 @@
 import "./i18n";
-import { RouterProvider } from "react-router-dom";
-import { router } from "./router";
+import Router from "./router"; // ✅ импорт по умолчанию, а не { router }
 
 function App() {
-  return <RouterProvider router={router} />;
+  // ✅ просто рендерим Router
+  return <Router />;
 }
 
 export default App;
