@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     APP_NAME: str = "HOM Backend"
     DEBUG: bool = False
     ENV: str = "stage"
+    VERSION: str = "1.0.0"
 
     # БД
     DATABASE_URL: str = Field(..., alias="DB_URL")  # ✅ теперь поддерживает и DB_URL, и DATABASE_URL
@@ -31,7 +32,7 @@ class Settings(BaseSettings):
     ADMIN_BOOTSTRAP_PATH: str = "/adminpanel/bootstrap"
 
     # CORS (строгий список, по умолчанию пустой)
-    CORS_ORIGINS: Union[List[AnyHttpUrl], str] = []
+    CORS_ORIGINS: Optional[List[str]] = ["*"]
 
     # Логи
     LOG_JSON: bool = True
