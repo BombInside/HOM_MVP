@@ -1,74 +1,112 @@
 # -*- coding: utf-8 -*-
-from __future__ import annotations
+"""
+Роуты для админ-панели (bootstrap создания первого администратора).
+"""
 
+from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field
 
-from .db import get_session
-from .models import User, Role, UserRoleLink
-from .security import hash_password
+from app.db import get_session
+from app.models import User, Role, UserRoleLink
+from app.security import hash_password
 
-router = APIRouter(prefix="/adminpanel", tags=["adminpanel"])
+router = APIRouter(prefix="/adminpanel", tags=["AdminPanel"])
 
 
+# ---------- СХЕМЫ ----------
 class BootstrapRequest(BaseModel):
+    """Входные данные для создания первого администратора."""
     email: EmailStr
     password: str = Field(min_length=6)
     confirm_password: str = Field(min_length=6)
 
 
 class BootstrapResponse(BaseModel):
+    """Ответ API для bootstrap-эндпоинтов."""
     ok: bool
+    admin_exists: bool
     created_user_id: int | None = None
     message: str | None = None
-    admin_exists: bool
 
 
-async def _admin_exists(session):
-    """Проверяет, существует ли пользователь с ролью 'admin'."""
+# ---------- СЛУЖЕБНЫЕ ФУНКЦИИ ----------
+async def _admin_exists(session: AsyncSession) -> bool:
+    """
+    Проверяет, существует ли пользователь с ролью 'admin'.
+    Возвращает True/False (чистый bool, без None).
+    """
     q = (
         select(User)
         .join(UserRoleLink, UserRoleLink.user_id == User.id)
         .join(Role, Role.id == UserRoleLink.role_id)
         .where(Role.name == "admin")
     )
-    return await session.scalar(q)
+    user = await session.scalar(q)
+    return user is not None
 
 
+# ---------- ЭНДПОИНТЫ ----------
 @router.get("/bootstrap", response_model=BootstrapResponse)
-async def admin_bootstrap_state(session: AsyncSession = Depends(get_session)):
+async def admin_bootstrap_state(session: AsyncSession = Depends(get_session)) -> BootstrapResponse:
+    """Проверяет, создан ли уже администратор."""
     exists = await _admin_exists(session)
     return BootstrapResponse(ok=True, admin_exists=exists)
 
 
 @router.post("/bootstrap", response_model=BootstrapResponse)
-async def admin_bootstrap_post(payload: BootstrapRequest, session: AsyncSession = Depends(get_session)):
-    if payload.password != payload.confirm_password:
-        raise HTTPException(status_code=400, detail="Пароли не совпадают")
+async def admin_bootstrap_post(
+    payload: BootstrapRequest,
+    session: AsyncSession = Depends(get_session),
+) -> BootstrapResponse:
+    """
+    Создаёт первого администратора, если он ещё не существует.
+    Проверяет пароли, наличие роли 'admin', и добавляет связь.
+    """
 
-    # Ensure roles exist
+    # Проверка совпадения паролей
+    if payload.password != payload.confirm_password:
+        raise HTTPException(status_code=400, detail="Passwords do not match")
+
+    # Проверяем, есть ли уже администратор
+    if await _admin_exists(session):
+        raise HTTPException(status_code=400, detail="Administrator already exists")
+
+    # Проверяем/создаём роль 'admin'
     q = await session.execute(select(Role).where(Role.name == "admin"))
     admin_role = q.scalar_one_or_none()
     if not admin_role:
-        admin_role = Role(name="admin", description="Администратор")
+        admin_role = Role(name="admin", description="Administrator")
         session.add(admin_role)
         await session.flush()
 
-    # Create user if not exists
+    # Проверяем, есть ли пользователь с таким email
     q = await session.execute(select(User).where(User.email == payload.email))
     existing = q.scalar_one_or_none()
     if existing:
-        raise HTTPException(status_code=409, detail="Пользователь с таким email уже существует")
+        raise HTTPException(status_code=409, detail="User with this email already exists")
 
-    user = User(email=str(payload.email), password_hash=hash_password(payload.password), is_active=True)
+    # Создаём пользователя
+    user = User(
+        email=str(payload.email),
+        password_hash=hash_password(payload.password),
+        is_active=True,
+        is_admin=True,
+    )
     session.add(user)
     await session.flush()
 
-    # Link role
-    await session.execute(UserRoleLink.insert().values(user_id=user.id, role_id=admin_role.id))
+    # Создаём связь с ролью (через ORM-объект)
+    link = UserRoleLink(user_id=user.id, role_id=admin_role.id)
+    session.add(link)
+
     await session.commit()
 
-    return BootstrapResponse(ok=True, admin_exists=True, created_user_id=user.id, message="Администратор создан")
+    return BootstrapResponse(
+        ok=True,
+        admin_exists=True,
+        created_user_id=user.id,
+        message="Admin user created successfully.",
+    )
