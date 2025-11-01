@@ -34,7 +34,7 @@ async def _admin_exists(session: AsyncSession) -> bool:
         return False
     q = await session.execute(
         select(User.id)
-        .join(UserRoleLink, UserRoleLink.c.user_id == User.id)
+        .join(UserRoleLink, UserRoleLink.user_id == User.id)
         .where(UserRoleLink.c.role_id == admin_role.id)
         .limit(1)
     )
