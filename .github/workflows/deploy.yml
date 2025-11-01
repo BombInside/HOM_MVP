@@ -13,22 +13,28 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: Set up SSH
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      - name: Deploy to remote server
+      - name: Setup SSH
         env:
-          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
-          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
-          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
-          FRONTEND_API_URL: ${{ secrets.FRONTEND_API_URL }}
+            SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+            REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+            mkdir -p ~/.ssh
+            echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+            chmod 600 ~/.ssh/id_rsa
+            ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
+
+    
+      - name: Validate required secrets
+        env:
+            DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
+            JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
+            CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
+            FRONTEND_API_URL: ${{ secrets.FRONTEND_API_URL }}
+            REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
         run: |
           echo "🚀 Starting deployment on $REMOTE_HOST"
 
-          ssh -o StrictHostKeyChecking=no root@$REMOTE_HOST << 'EOF'
+          ssh -o StrictHostKeyChecking=no deployer@${{ secrets.STAGE_HOST }} << 'EOF'
 
           cd ~/dev/hom_mvp || exit 1
 
