@@ -1,81 +1,101 @@
+# app/models.py
 # -*- coding: utf-8 -*-
 """
-Базовые модели пользователей/ролей/прав для RBAC.
+Модели данных для RBAC: пользователи, роли и права.
+Совместимо с SQLAlchemy 2.x и SQLModel 0.0.16+.
 """
+
 from __future__ import annotations
 from typing import Optional, List
 from datetime import datetime
-from sqlmodel import SQLModel, Field, Relationship, UniqueConstraint
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint
+from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
 
 
-class UserRoleLink(SQLModel, table=True):
-    """Промежуточная таблица many-to-many между пользователем и ролью."""
+# ---------- БАЗОВЫЙ КЛАСС ----------
+class Base(DeclarativeBase):
+    """Базовый класс для всех ORM-моделей."""
+    pass
+
+
+# ---------- ЛИНК-ТАБЛИЦЫ ----------
+class UserRoleLink(Base):
+    """Связь many-to-many между пользователями и ролями."""
     __tablename__ = "user_role_link"
-    user_id: int = Field(foreign_key="user.id", primary_key=True)
-    role_id: int = Field(foreign_key="role.id", primary_key=True)
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("user.id"), primary_key=True)
+    role_id: Mapped[int] = mapped_column(ForeignKey("role.id"), primary_key=True)
 
 
-class RolePermissionLink(SQLModel, table=True):
-    """Промежуточная таблица many-to-many между ролью и правом."""
+class RolePermissionLink(Base):
+    """Связь many-to-many между ролями и правами."""
     __tablename__ = "role_permission_link"
-    role_id: int = Field(foreign_key="role.id", primary_key=True)
-    permission_id: int = Field(foreign_key="permission.id", primary_key=True)
+
+    role_id: Mapped[int] = mapped_column(ForeignKey("role.id"), primary_key=True)
+    permission_id: Mapped[int] = mapped_column(ForeignKey("permission.id"), primary_key=True)
 
 
-class User(SQLModel, table=True):
+# ---------- ОСНОВНЫЕ МОДЕЛИ ----------
+class User(Base):
     """Пользователь системы."""
     __tablename__ = "user"
     __table_args__ = (UniqueConstraint("email", name="uq_user_email"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    email: str = Field(index=True, nullable=False)
-    password_hash: str = Field(nullable=False)
-    is_active: bool = Field(default=True, nullable=False)
-    created_at: datetime = Field(default_factory=datetime.utcnow, nullable=False)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
-    # связи
-    roles: list["Role"] = Relationship(
+    roles: Mapped[List["Role"]] = relationship(
+        secondary="user_role_link",
         back_populates="users",
-        link_model=UserRoleLink,
-        sa_relationship_kwargs={"lazy": "selectin"},
+        lazy="selectin",
     )
 
+    def __repr__(self) -> str:
+        return f"<User {self.email}>"
 
-class Role(SQLModel, table=True):
-    """Роль пользователя (набор прав)."""
+
+class Role(Base):
+    """Роль (набор разрешений)."""
     __tablename__ = "role"
     __table_args__ = (UniqueConstraint("name", name="uq_role_name"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    name: str = Field(index=True, nullable=False)
-    description: Optional[str] = Field(default=None)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255))
 
-    # связи
-    users: list[User] = Relationship(
+    users: Mapped[List["User"]] = relationship(
+        secondary="user_role_link",
         back_populates="roles",
-        link_model=UserRoleLink,
-        sa_relationship_kwargs={"lazy": "selectin"},
+        lazy="selectin",
     )
 
-    permissions: list["Permission"] = Relationship(
+    permissions: Mapped[List["Permission"]] = relationship(
+        secondary="role_permission_link",
         back_populates="roles",
-        link_model=RolePermissionLink,
-        sa_relationship_kwargs={"lazy": "selectin"},
+        lazy="selectin",
     )
 
+    def __repr__(self) -> str:
+        return f"<Role {self.name}>"
 
-class Permission(SQLModel, table=True):
-    """Единичное право (действие на сущности)."""
+
+class Permission(Base):
+    """Право (действие, разрешённое роли)."""
     __tablename__ = "permission"
     __table_args__ = (UniqueConstraint("code", name="uq_permission_code"),)
 
-    id: Optional[int] = Field(default=None, primary_key=True)
-    code: str = Field(index=True, nullable=False)  # например: machines.read, machines.write
-    description: Optional[str] = Field(default=None)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    description: Mapped[Optional[str]] = mapped_column(String(255))
 
-    # связи
-    roles: list[Role] = Relationship(
+    roles: Mapped[List["Role"]] = relationship(
+        secondary="role_permission_link",
         back_populates="permissions",
-        link_model=RolePermissionLink,
-        sa_relationship_kwargs={"lazy": "selectin"},
+        lazy="selectin",
     )
+
+    def __repr__(self) -> str:
+        return f"<Permission {self.code}>"
