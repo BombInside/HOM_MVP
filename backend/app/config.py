@@ -9,7 +9,7 @@ from __future__ import annotations
 from functools import lru_cache
 from typing import List, Union
 from pydantic_settings import BaseSettings
-from pydantic import AnyHttpUrl, field_validator, Field
+from pydantic import AnyHttpUrl, field_validator
 import json
 
 
@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     ENV: str = "stage"
 
     # БД
-    DATABASE_URL: str = Field(..., alias="DB_URL")
+    DB_URL: str
 
     # JWT / Session
     JWT_SECRET: str
