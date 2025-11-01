@@ -1,4 +1,4 @@
-"""init tables safely"""
+"""init tables safely + seed default roles, permissions, and admin links"""
 
 from alembic import op
 import sqlalchemy as sa
@@ -58,6 +58,60 @@ def upgrade() -> None:
             sa.Column("role_id", sa.Integer, sa.ForeignKey("role.id", ondelete="CASCADE"), primary_key=True),
             sa.Column("permission_id", sa.Integer, sa.ForeignKey("permission.id", ondelete="CASCADE"), primary_key=True),
         )
+
+    # === SEED default roles and permissions ===
+    connection = op.get_bind()
+
+    # Existing roles
+    existing_roles = []
+    if "role" in inspector.get_table_names():
+        existing_roles = [r[0] for r in connection.execute(sa.text("SELECT name FROM role")).fetchall()]
+
+    # Insert roles
+    if "admin" not in existing_roles:
+        connection.execute(
+            sa.text("INSERT INTO role (name, description) VALUES (:name, :desc)"),
+            {"name": "admin", "desc": "Administrator role"},
+        )
+
+    if "user" not in existing_roles:
+        connection.execute(
+            sa.text("INSERT INTO role (name, description) VALUES (:name, :desc)"),
+            {"name": "user", "desc": "Default user role"},
+        )
+
+    # Existing permissions
+    existing_permissions = []
+    if "permission" in inspector.get_table_names():
+        existing_permissions = [p[0] for p in connection.execute(sa.text("SELECT code FROM permission")).fetchall()]
+
+    default_permissions = [
+        {"code": "view_dashboard", "description": "Access to dashboard"},
+        {"code": "manage_users", "description": "Can manage users"},
+        {"code": "manage_roles", "description": "Can manage roles"},
+    ]
+
+    for perm in default_permissions:
+        if perm["code"] not in existing_permissions:
+            connection.execute(
+                sa.text("INSERT INTO permission (code, description) VALUES (:code, :desc)"),
+                {"code": perm["code"], "desc": perm["description"]},
+            )
+
+    # === Link admin role with all permissions ===
+    admin_role_id = connection.execute(sa.text("SELECT id FROM role WHERE name = 'admin'")).scalar()
+    if admin_role_id:
+        permissions = connection.execute(sa.text("SELECT id FROM permission")).fetchall()
+        for (perm_id,) in permissions:
+            exists = connection.execute(
+                sa.text("SELECT 1 FROM role_permission_link WHERE role_id = :r AND permission_id = :p"),
+                {"r": admin_role_id, "p": perm_id},
+            ).fetchone()
+            if not exists:
+                connection.execute(
+                    sa.text("INSERT INTO role_permission_link (role_id, permission_id) VALUES (:r, :p)"),
+                    {"r": admin_role_id, "p": perm_id},
+                )
 
 
 def downgrade() -> None:

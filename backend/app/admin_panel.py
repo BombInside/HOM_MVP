@@ -2,17 +2,17 @@
 """
 Маршруты админ-панели:
 - Одноразовый bootstrap для создания первого администратора
-- Редактор ролей и прав
-Примечание: для простоты используем JSON формы (application/json) и минимальный HTML вывод.
+- CRUD для ролей и прав
+Возвращает только JSON, без HTML-страниц.
 """
 
 from __future__ import annotations
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel  # ✅ добавлено
+from pydantic import BaseModel
 
 from .config import get_settings
 from .db import get_session
@@ -25,73 +25,53 @@ settings = get_settings()
 
 
 async def _admin_exists(session: AsyncSession) -> bool:
-    """
-    Проверяет, существует ли в системе хотя бы один пользователь с ролью 'admin'.
-    """
+    """Проверяет, существует ли хотя бы один пользователь с ролью admin."""
     q = await session.execute(select(Role).where(Role.name == "admin"))
     admin_role = q.scalars().first()
     if not admin_role:
         return False
     q2 = await session.execute(select(UserRoleLink).where(UserRoleLink.role_id == admin_role.id))
-    link = q2.first()
-    return link is not None
+    return q2.first() is not None
 
 
 @router.get("/health", include_in_schema=False)
 async def health() -> dict:
-    """Проверка живости сервиса для healthcheck контейнера/nginx."""
+    """Healthcheck для контейнера/nginx."""
     return {"status": "ok"}
 
 
-@router.get(settings.ADMIN_BOOTSTRAP_PATH, response_class=HTMLResponse, include_in_schema=False)
-async def admin_bootstrap_form(request: Request, session: AsyncSession = Depends(get_session)) -> HTMLResponse:
+# ================= BOOTSTRAP ADMIN =================
+
+@router.get("/adminpanel/bootstrap/status", response_class=JSONResponse)
+async def admin_bootstrap_status(session: AsyncSession = Depends(get_session)):
+    """Возвращает состояние: создан ли уже администратор."""
+    exists = await _admin_exists(session)
+    return {"admin_exists": exists}
+
+
+class BootstrapPayload(BaseModel):
+    email: str
+    password: str
+
+
+@router.post("/adminpanel/bootstrap", response_class=JSONResponse)
+async def admin_bootstrap_post(payload: BootstrapPayload, session: AsyncSession = Depends(get_session)):
     """
-    HTML форма для создания первого администратора.
-    Доступна ТОЛЬКО пока администратора нет.
-    После создания — редирект на '/' и всплывающее сообщение.
+    Создаёт первого администратора в системе.
+    Если админ уже есть — возвращает сообщение и код 400.
     """
     if await _admin_exists(session):
-        return HTMLResponse(
-            "<html><body><script>window.location='/'</script>"
-            "<p>Пользователь с правами администратора уже существует. "
-            "Форма бустрапа выключена.</p></body></html>",
-            status_code=status.HTTP_403_FORBIDDEN,
+        return JSONResponse(
+            status_code=400,
+            content={"success": False, "message": "Администратор уже существует."},
         )
 
-    html = f"""
-    <html>
-      <body>
-        <h1>Bootstrap администратора</h1>
-        <form method="post" action="{settings.ADMIN_BOOTSTRAP_PATH}">
-          <label>Email: <input type="email" name="email" required/></label><br/>
-          <label>Пароль: <input type="password" name="password" required/></label><br/>
-          <button type="submit">Создать</button>
-        </form>
-      </body>
-    </html>
-    """
-    return HTMLResponse(html)
-
-
-@router.post(settings.ADMIN_BOOTSTRAP_PATH, include_in_schema=False)
-async def admin_bootstrap_post(request: Request, session: AsyncSession = Depends(get_session)) -> RedirectResponse:
-    """
-    Обработчик создания первого администратора.
-    После успешного создания — редирект на '/'.
-    Если админ уже есть — форма закрыта, редирект на '/'.
-    """
-    if await _admin_exists(session):
-        response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-        response.set_cookie("toast", "Администратор уже существует", httponly=False)
-        return response
-
-    form = await request.form()
-    email = str(form.get("email", "")).strip().lower()
-    password = str(form.get("password", "")).strip()
+    email = payload.email.strip().lower()
+    password = payload.password.strip()
     if not email or not password:
         raise HTTPException(status_code=400, detail="Email и пароль обязательны")
 
-    # создаём роль admin если нет
+    # создаём роль admin, если нет
     q = await session.execute(select(Role).where(Role.name == "admin"))
     admin_role = q.scalars().first()
     if not admin_role:
@@ -109,12 +89,16 @@ async def admin_bootstrap_post(request: Request, session: AsyncSession = Depends
     session.add(link)
     await session.commit()
 
-    response = RedirectResponse(url="/", status_code=status.HTTP_303_SEE_OTHER)
-    response.set_cookie("toast", "Администратор создан", httponly=False)
-    return response
+    return JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "message": "Администратор успешно создан."
+        },
+    )
 
 
-# -------------------- Редактор ролей и прав --------------------
+# ================= ROLE MANAGEMENT =================
 
 def _require_admin(user: User) -> None:
     """Проверяем, что у пользователя есть роль admin."""
@@ -127,19 +111,23 @@ async def list_roles(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Возвращает список ролей и их прав (для интерфейса редактора)."""
+    """Возвращает список ролей и их прав."""
     _require_admin(user)
     q = await session.execute(select(Role))
     roles = q.scalars().all()
-    result = []
-    for role in roles:
-        permissions = [p.code for p in role.permissions]
-        result.append({"id": role.id, "name": role.name, "description": role.description, "permissions": permissions})
-    return result
+    return [
+        {
+            "id": role.id,
+            "name": role.name,
+            "description": role.description,
+            "permissions": [p.code for p in role.permissions],
+        }
+        for role in roles
+    ]
 
 
-class RoleUpsertPayload(BaseModel):  # ✅ исправлено
-    """Полезная нагрузка для создания или обновления роли."""
+class RoleUpsertPayload(BaseModel):
+    """Тело запроса для создания или обновления роли."""
     name: str
     description: Optional[str] = None
     permissions: List[str] = []
@@ -151,7 +139,7 @@ async def create_role(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Создаёт новую роль и назначает список permissions (по code)."""
+    """Создаёт новую роль и назначает права."""
     _require_admin(user)
     name = payload.name.strip()
     if not name:
@@ -163,17 +151,16 @@ async def create_role(
 
     codes = [c.strip() for c in payload.permissions if c.strip()]
     if codes:
-        from sqlmodel import or_
         q = await session.execute(select(Permission).where(Permission.code.in_(codes)))
-        exists = {p.code: p for p in q.scalars().all()}
-        to_add = []
+        existing = {p.code: p for p in q.scalars().all()}
+        new_perms = []
         for code in codes:
-            perm = exists.get(code) or Permission(code=code)
+            perm = existing.get(code) or Permission(code=code)
             if not perm.id:
                 session.add(perm)
                 await session.flush()
-            to_add.append(perm)
-        role.permissions = to_add  # type: ignore[assignment]
+            new_perms.append(perm)
+        role.permissions = new_perms  # type: ignore[assignment]
 
     await session.commit()
     return {
@@ -191,9 +178,8 @@ async def update_role(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Обновляет роль и её permissions (список code)."""
+    """Обновляет роль и её permissions."""
     _require_admin(user)
-
     q = await session.execute(select(Role).where(Role.id == role_id))
     role = q.scalars().first()
     if not role:
@@ -229,14 +215,12 @@ async def delete_role(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_session),
 ):
-    """Удаляет роль. Связи с пользователями также удаляются (через каскад внешних ключей на уровне БД)."""
+    """Удаляет роль. Связи с пользователями также удаляются каскадом."""
     _require_admin(user)
-
     q = await session.execute(select(Role).where(Role.id == role_id))
     role = q.scalars().first()
     if not role:
         raise HTTPException(404, "Роль не найдена")
-
     await session.delete(role)
     await session.commit()
     return JSONResponse(status_code=204, content={})

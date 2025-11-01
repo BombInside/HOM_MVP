@@ -1,11 +1,10 @@
 import { useEffect, useState, FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../../api";  
+import api from "../../api";
 
 /**
  * Страница первичного создания администратора.
  * Отображается только если администратора ещё нет.
- * После успешного создания — редирект на страницу входа.
  */
 const AdminBootstrap = () => {
   const navigate = useNavigate();
@@ -18,7 +17,6 @@ const AdminBootstrap = () => {
   const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
-    // Проверяем, существует ли администратор
     const checkStatus = async () => {
       try {
         const res = await api.get("/adminpanel/bootstrap/status");
@@ -26,7 +24,7 @@ const AdminBootstrap = () => {
           setExists(true);
           setLoading(false);
           setTimeout(() => {
-            alert("Администратор уже создан. Вы будете перенаправлены на главную страницу.");
+            alert("Администратор уже создан. Перенаправление на главную страницу...");
             navigate("/");
           }, 2000);
         } else {
@@ -53,10 +51,14 @@ const AdminBootstrap = () => {
 
     try {
       const res = await api.post("/adminpanel/bootstrap", { email, password });
-      setSuccess(res.data?.message || "Администратор успешно создан");
-      setTimeout(() => navigate("/login"), 1500);
+      if (res.data?.success) {
+        setSuccess(res.data.message || "Администратор успешно создан");
+        setTimeout(() => navigate("/login"), 1500);
+      } else {
+        setError(res.data?.message || "Ошибка при создании администратора");
+      }
     } catch (err: any) {
-      const msg = err?.response?.data?.detail || "Ошибка при создании администратора";
+      const msg = err?.response?.data?.message || err?.response?.data?.detail || "Ошибка при создании администратора";
       setError(msg);
     }
   };
