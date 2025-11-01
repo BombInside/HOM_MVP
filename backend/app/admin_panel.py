@@ -8,7 +8,7 @@ from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field
 
 from .db import get_session
-from .models import User, Role, user_roles
+from .models import User, Role, UserRoleLink
 from .security import hash_password
 
 router = APIRouter(prefix="/adminpanel", tags=["adminpanel"])
@@ -34,8 +34,8 @@ async def _admin_exists(session: AsyncSession) -> bool:
         return False
     q = await session.execute(
         select(User.id)
-        .join(user_roles, user_roles.c.user_id == User.id)
-        .where(user_roles.c.role_id == admin_role.id)
+        .join(UserRoleLink, UserRoleLink.c.user_id == User.id)
+        .where(UserRoleLink.c.role_id == admin_role.id)
         .limit(1)
     )
     return q.first() is not None
@@ -71,7 +71,7 @@ async def admin_bootstrap_post(payload: BootstrapRequest, session: AsyncSession 
     await session.flush()
 
     # Link role
-    await session.execute(user_roles.insert().values(user_id=user.id, role_id=admin_role.id))
+    await session.execute(UserRoleLink.insert().values(user_id=user.id, role_id=admin_role.id))
     await session.commit()
 
     return BootstrapResponse(ok=True, admin_exists=True, created_user_id=user.id, message="Администратор создан")

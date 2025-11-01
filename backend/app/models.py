@@ -12,6 +12,7 @@ from sqlalchemy import String, Boolean, DateTime, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship, DeclarativeBase
 
 
+
 # ---------- БАЗОВЫЙ КЛАСС ----------
 class Base(DeclarativeBase):
     """Базовый класс для всех ORM-моделей."""
