@@ -1,7 +1,7 @@
 """init tables safely + seed default roles, permissions, and admin links
 
 Revision ID: 0001_init
-Revises: 
+Revises:
 Create Date: 2025-11-01 00:00:00.000000
 """
 from typing import Sequence, Union
@@ -20,8 +20,8 @@ def upgrade() -> None:
     op.create_table(
         "user",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("email", sa.String(), unique=True, nullable=False),
-        sa.Column("password_hash", sa.String(), nullable=False),
+        sa.Column("email", sa.String(255), unique=True, nullable=False, index=True),
+        sa.Column("password_hash", sa.String(255), nullable=False),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default=sa.text("true")),
         sa.Column("created_at", sa.DateTime(), server_default=sa.text("CURRENT_TIMESTAMP"), nullable=False),
     )
@@ -29,15 +29,15 @@ def upgrade() -> None:
     op.create_table(
         "role",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("name", sa.String(), unique=True, nullable=False),
-        sa.Column("description", sa.String(), nullable=True),
+        sa.Column("name", sa.String(100), unique=True, nullable=False, index=True),
+        sa.Column("description", sa.String(255), nullable=True),
     )
 
     op.create_table(
         "permission",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("name", sa.String(), unique=True, nullable=False),
-        sa.Column("description", sa.String(), nullable=True),
+        sa.Column("code", sa.String(100), unique=True, nullable=False, index=True),
+        sa.Column("description", sa.String(255), nullable=True),
     )
 
     op.create_table(
@@ -53,13 +53,13 @@ def upgrade() -> None:
 
     # --- Association tables
     op.create_table(
-        "user_roles",
+        "user_role_link",
         sa.Column("user_id", sa.Integer(), sa.ForeignKey("user.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("role_id", sa.Integer(), sa.ForeignKey("role.id", ondelete="CASCADE"), primary_key=True),
     )
 
     op.create_table(
-        "role_permissions",
+        "role_permission_link",
         sa.Column("role_id", sa.Integer(), sa.ForeignKey("role.id", ondelete="CASCADE"), primary_key=True),
         sa.Column("permission_id", sa.Integer(), sa.ForeignKey("permission.id", ondelete="CASCADE"), primary_key=True),
     )
@@ -86,19 +86,19 @@ def upgrade() -> None:
         ("view_dashboard", "Просмотр дашборда"),
     ]
     sql_perms = sa.text(
-        "INSERT INTO permission (name, description) "
-        "VALUES (:name, :desc) "
-        "ON CONFLICT (name) DO NOTHING"
+        "INSERT INTO permission (code, description) "
+        "VALUES (:code, :desc) "
+        "ON CONFLICT (code) DO NOTHING"
     )
-    conn.execute(sql_perms, [{"name": n, "desc": d} for n, d in perm_names])
+    conn.execute(sql_perms, [{"code": n, "desc": d} for n, d in perm_names])
 
     # Grant admin permissions
     sql_grant = sa.text(
-        "INSERT INTO role_permissions (role_id, permission_id) "
+        "INSERT INTO role_permission_link (role_id, permission_id) "
         "SELECT r.id, p.id "
         "FROM role r CROSS JOIN permission p "
         "WHERE r.name='admin' "
-        "AND p.name IN ('admin_access','manage_users','manage_roles','view_dashboard') "
+        "AND p.code IN ('admin_access','manage_users','manage_roles','view_dashboard') "
         "ON CONFLICT DO NOTHING"
     )
     conn.execute(sql_grant)
@@ -119,8 +119,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.drop_table("role_permissions")
-    op.drop_table("user_roles")
+    op.drop_table("role_permission_link")
+    op.drop_table("user_role_link")
     op.drop_table("admin_menu_link")
     op.drop_table("permission")
     op.drop_table("role")
