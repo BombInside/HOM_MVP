@@ -36,7 +36,7 @@ jobs:
 
             echo "🧩 Creating/updating frontend .env.stage"
             cat > frontend/.env.stage <<EOT
-            VITE_API_URL=${{ secrets.STAGE_API_URL }}
+            VITE_API_URL=/api
             VITE_APP_ENV=stage
             EOT
 
