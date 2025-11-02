@@ -17,7 +17,7 @@ class User(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     roles: Mapped[List["Role"]] = relationship(
         secondary="user_role_link",
-        back_populates="users",
+        back_populates="user",
         lazy="selectin",
     )
     def __repr__(self) -> str:
