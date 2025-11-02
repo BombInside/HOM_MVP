@@ -25,10 +25,10 @@ def upgrade() -> None:
     op.execute("DO $$ BEGIN CREATE TYPE repair_status AS ENUM ('open','in_progress','closed'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
 
     # Теперь можно использовать обычные Enum без create_type=False
-    line_status = sa.Enum("working", "maintenance", "stopped", name="line_status")
-    machine_status = sa.Enum("operational", "broken", "maintenance", name="machine_status")
-    repair_type = sa.Enum("scheduled", "unscheduled", name="repair_type")
-    repair_status = sa.Enum("open", "in_progress", "closed", name="repair_status")
+    line_status = sa.Enum("working", "maintenance", "stopped", name="line_status", checkfirst=True)
+    machine_status = sa.Enum("operational", "broken", "maintenance", name="machine_status", checkfirst=True)
+    repair_type = sa.Enum("scheduled", "unscheduled", name="repair_type", checkfirst=True)
+    repair_status = sa.Enum("open", "in_progress", "closed", name="repair_status", checkfirst=True)
 
     # --- lines ---
     op.create_table(
