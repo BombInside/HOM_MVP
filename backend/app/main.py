@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Точка входа FastAPI: CORS, middleware, аудит, роутеры и lifecycle.
-Исправлен порядок инициализации, добавлены безопасные типы для mypy.
+Исправлен порядок инициализации, убрано авто-создание таблиц.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
-from app.db import wait_for_db_ready #, create_db_and_tables
+from app.db import wait_for_db_ready
 from app.admin_panel import router as admin_router
 from app.routes_auth import router as auth_router
 from app.api.system import router as system_router
@@ -81,10 +81,10 @@ app.include_router(audit_log.router, prefix="/api")             # type: ignore[a
 
 @app.on_event("startup")
 async def on_startup() -> None:
-    """Ожидание готовности БД и создание таблиц при старте."""
+    """Ожидание готовности БД и Alembic-инициализация (если нужно)."""
     await wait_for_db_ready()
-    await create_db_and_tables()
-    logger.info("Application started.")
+    logger.info("✅ Database connection established.")
+    logger.info("🚀 Application startup complete.")
 
 
 @app.get("/", include_in_schema=False)

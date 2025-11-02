@@ -1,8 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Alembic env для асинхронных миграций.
-Гарантированно находит приложение в Docker, импортирует Settings и Base,
-и прогоняет миграции поверх async-engine.
+Исправлено: не импортирует модели, чтобы избежать дублирования Enum типов.
 """
 
 from __future__ import annotations
@@ -17,8 +16,7 @@ from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import create_async_engine
 
 # ----------------------------------------------------
-# Пути, чтобы Alembic видел наше приложение
-# (backend/alembic/env.py -> добавляем backend/ и backend/app в sys.path)
+# Пути, чтобы Alembic видел приложение
 # ----------------------------------------------------
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # .../backend
 APP_DIR = os.path.join(BASE_DIR, "app")
@@ -28,25 +26,25 @@ if BASE_DIR not in sys.path:
 if APP_DIR not in sys.path:
     sys.path.append(APP_DIR)
 
+# ----------------------------------------------------
 # Конфигурация и логирование Alembic
+# ----------------------------------------------------
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # ----------------------------------------------------
-# Импорты приложения (после настройки путей!)
+# Импорты приложения (только базовый класс и настройки)
 # ----------------------------------------------------
 from app.config import get_settings
-from app.models import Base  # <-- из app.models, где Base = app.db.Base
+from app.db import Base  # теперь импорт напрямую из app.db, без загрузки всех моделей
 
 settings = get_settings()
-
-# Устанавливаем URL БД для Alembic из настроек
 DATABASE_URL = settings.DATABASE_URL
 config.set_main_option("sqlalchemy.url", DATABASE_URL)
 
 # ----------------------------------------------------
-# Метадата моделей (чтобы работал autogenerate)
+# Метадата моделей (для autogenerate)
 # ----------------------------------------------------
 target_metadata = Base.metadata
 
@@ -59,7 +57,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
-        compare_type=True,  # учитываем изменение типов (в т.ч. Enum)
+        compare_type=True,
         compare_server_default=True,
     )
 
