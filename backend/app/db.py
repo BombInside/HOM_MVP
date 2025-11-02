@@ -76,4 +76,4 @@ async def create_db_and_tables() -> None:
     ), "Ожидалось, что app.models.Base и app.db.Base — это один и тот же объект."
     async with engine.begin() as conn:
     #    await conn.run_sync(Base.metadata.create_all)
-    await conn.run_sync(Base.metadata.create_all, checkfirst=True)
+        await conn.run_sync(Base.metadata.create_all, checkfirst=True)
