@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from alembic import op
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import ENUM
+from sqlalchemy.dialects.postgresql import ENUM as PGEnum
 
 
 # revision identifiers, used by Alembic.
@@ -19,48 +19,48 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # -----------------------------------------------
-    # 1. Создаём ENUM типы безопасно через DO $$ 
-    # -----------------------------------------------
-    enums_sql = [
-        "CREATE TYPE line_status AS ENUM ('working','maintenance','stopped');",
-        "CREATE TYPE machine_status AS ENUM ('operational','broken','maintenance','active');",
-        "CREATE TYPE repair_type AS ENUM ('scheduled','unscheduled');",
-        "CREATE TYPE repair_status AS ENUM ('open','in_progress','closed');",
-    ]
-    for stmt in enums_sql:
-        op.execute(f"DO $$ BEGIN {stmt} EXCEPTION WHEN duplicate_object THEN null; END $$;")
+    # ------------------------------------------------------------
+    # 1) Идемпотентно создаём ENUM-типы напрямую в PostgreSQL
+    #    (на случай повторного запуска — не упадёт на duplicate_object)
+    # ------------------------------------------------------------
+    op.execute("""
+    DO $$ BEGIN
+        CREATE TYPE line_status AS ENUM ('working','maintenance','stopped');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    """)
+    op.execute("""
+    DO $$ BEGIN
+        CREATE TYPE machine_status AS ENUM ('operational','broken','maintenance','active');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    """)
+    op.execute("""
+    DO $$ BEGIN
+        CREATE TYPE repair_type AS ENUM ('scheduled','unscheduled');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    """)
+    op.execute("""
+    DO $$ BEGIN
+        CREATE TYPE repair_status AS ENUM ('open','in_progress','closed');
+    EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+    """)
 
-    # -----------------------------------------------
-    # 2. Регистрируем типы в SQLAlchemy (важно!)
-    # -----------------------------------------------
+    # ------------------------------------------------------------
+    # 2) Регистрируем их в SQLAlchemy как уже существующие типы
+    #    ВАЖНО: используем PGEnum только по имени типа (без значений!)
+    #    и create_type=False — это отключает любое CREATE TYPE.
+    # ------------------------------------------------------------
     bind = op.get_bind()
-    for name in ["line_status", "machine_status", "repair_type", "repair_status"]:
-        ENUM(name=name, create_type=False).create(bind, checkfirst=True)
+    for name in ("line_status", "machine_status", "repair_type", "repair_status"):
+        PGEnum(name=name, create_type=False).create(bind, checkfirst=True)
 
-    # -----------------------------------------------
-    # 3. Используем уже существующие Enum'ы
-    # -----------------------------------------------
-    line_status = sa.Enum(
-        "working", "maintenance", "stopped",
-        name="line_status", native_enum=True, create_type=False
-    )
-    machine_status = sa.Enum(
-        "operational", "broken", "maintenance", "active",
-        name="machine_status", native_enum=True, create_type=False
-    )
-    repair_type = sa.Enum(
-        "scheduled", "unscheduled",
-        name="repair_type", native_enum=True, create_type=False
-    )
-    repair_status = sa.Enum(
-        "open", "in_progress", "closed",
-        name="repair_status", native_enum=True, create_type=False
-    )
+    line_status = PGEnum(name="line_status", create_type=False)
+    machine_status = PGEnum(name="machine_status", create_type=False)
+    repair_type = PGEnum(name="repair_type", create_type=False)
+    repair_status = PGEnum(name="repair_status", create_type=False)
 
-    # -----------------------------------------------
-    # 4. Создаём таблицы
-    # -----------------------------------------------
+    # ------------------------------------------------------------
+    # 3) Таблицы
+    # ------------------------------------------------------------
     op.create_table(
         "lines",
         sa.Column("id", sa.Integer(), primary_key=True),
@@ -72,7 +72,8 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True)),
-        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL")),
+        # ВАЖНО: в 0001_init таблица называется "user" (в ед. числе)
+        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL")),
     )
 
     op.create_table(
@@ -85,7 +86,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("deleted_at", sa.DateTime(timezone=True)),
-        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL")),
+        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL")),
     )
 
     op.create_table(
@@ -95,8 +96,9 @@ def upgrade() -> None:
         sa.Column("description", sa.Text()),
         sa.Column("repair_type", repair_type, nullable=False, server_default="unscheduled"),
         sa.Column("status", repair_status, nullable=False, server_default="open"),
-        sa.Column("created_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False),
-        sa.Column("updated_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL")),
+        # Совместимо с 0001_init (таблица user)
+        sa.Column("created_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("updated_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL")),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
     )
@@ -108,7 +110,7 @@ def upgrade() -> None:
         sa.Column("original_name", sa.String(256), nullable=False),
         sa.Column("file_path", sa.String(512), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column("uploaded_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL")),
+        sa.Column("uploaded_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL")),
     )
 
 
@@ -118,5 +120,6 @@ def downgrade() -> None:
     op.drop_table("machines")
     op.drop_table("lines")
 
-    for tname in ["line_status", "machine_status", "repair_type", "repair_status"]:
+    # Чистим типы (идемпотентно)
+    for tname in ("line_status", "machine_status", "repair_type", "repair_status"):
         op.execute(f"DROP TYPE IF EXISTS {tname} CASCADE;")
