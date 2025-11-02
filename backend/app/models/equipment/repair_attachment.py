@@ -14,7 +14,7 @@ class RepairAttachment(Base, BaseModelMixin):
     file_path: Mapped[str] = mapped_column(String(512), nullable=False)
     mime_type: Mapped[Optional[str]] = mapped_column(String(128))
     size_bytes: Mapped[Optional[int]] = mapped_column(Integer)
-    uploaded_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
+    uploaded_by: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("user.id", ondelete="SET NULL"))
     repair: Mapped["Repair"] = relationship(back_populates="attachments", lazy="joined")
     __table_args__ = (Index("ix_repair_attachments_repair_id", "repair_id"),)
     def __repr__(self) -> str:
