@@ -26,7 +26,7 @@ class RepairAttachmentService:
     async def get_all(self, repair_id: int) -> list[RepairAttachment]:
         stmt = select(RepairAttachment).where(RepairAttachment.repair_id == repair_id)
         result = await self.db.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def get(self, attachment_id: int) -> RepairAttachment:
         attach = await self.db.get(RepairAttachment, attachment_id)
