@@ -19,10 +19,10 @@ depends_on = None
 
 def upgrade() -> None:
     # --- enums ---
-    line_status = sa.Enum("working", "maintenance", "stopped", name="line_status")
-    machine_status = sa.Enum("operational", "broken", "maintenance", name="machine_status")
-    repair_type = sa.Enum("scheduled", "unscheduled", name="repair_type")
-    repair_status = sa.Enum("open", "in_progress", "closed", name="repair_status")
+    line_status = sa.Enum("working", "maintenance", "stopped", name="line_status", create_type=False)
+    machine_status = sa.Enum("operational", "broken", "maintenance", name="machine_status", create_type=False)
+    repair_type = sa.Enum("scheduled", "unscheduled", name="repair_type", create_type=False)
+    repair_status = sa.Enum("open", "in_progress", "closed", name="repair_status", create_type=False)
 
     line_status.create(op.get_bind(), checkfirst=True)
     machine_status.create(op.get_bind(), checkfirst=True)
@@ -141,6 +141,8 @@ def downgrade() -> None:
     op.drop_table("lines")
 
     # enums
+    op.execute("DO $$ BEGIN CREATE TYPE line_status AS ENUM ('working', 'maintenance', 'stopped'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
+
     op.execute("DROP TYPE IF EXISTS line_status")
     op.execute("DROP TYPE IF EXISTS machine_status")
     op.execute("DROP TYPE IF EXISTS repair_type")
