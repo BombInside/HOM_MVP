@@ -24,7 +24,7 @@ def upgrade() -> None:
         "EXCEPTION WHEN duplicate_object THEN null; END $$;"
     )
     op.execute(
-        "DO $$ BEGIN CREATE TYPE machine_status AS ENUM ('operational','broken','maintenance'); "
+        "DO $$ BEGIN CREATE TYPE machine_status AS ENUM ('operational','broken','maintenance', 'active'); "
         "EXCEPTION WHEN duplicate_object THEN null; END $$;"
     )
     op.execute(
@@ -50,7 +50,7 @@ def upgrade() -> None:
         native_enum=True,
     )
     machine_status = sa.Enum(
-        "operational", "broken", "maintenance",
+        "operational", "broken", "maintenance", "active",
         name="machine_status",
         create_type=False,
         native_enum=True,

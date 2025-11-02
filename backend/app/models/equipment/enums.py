@@ -7,6 +7,7 @@ class LineStatus(enum.Enum):
     stopped = "stopped"
 
 class MachineStatus(enum.Enum):
+    active = "active"
     operational = "operational"
     broken = "broken"
     maintenance = "maintenance"

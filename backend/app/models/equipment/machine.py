@@ -19,7 +19,7 @@ class Machine(Base):
     status: Mapped[MachineStatus] = mapped_column(
         sa.Enum(MachineStatus, name="machine_status", create_type=False, native_enum=True),
         nullable=False,
-        default=MachineStatus.active,
+        default=MachineStatus.operational,
     )
 
     line: Mapped["Line"] = relationship("Line", back_populates="machines")
