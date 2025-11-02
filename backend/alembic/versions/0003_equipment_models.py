@@ -42,24 +42,28 @@ def upgrade() -> None:
         name="line_status",
         create_type=False,
         checkfirst=True,
+        native_enum=True
     )
     machine_status = sa.Enum(
         "operational", "broken", "maintenance",
         name="machine_status",
         create_type=False,
         checkfirst=True,
+        native_enum=True
     )
     repair_type = sa.Enum(
         "scheduled", "unscheduled",
         name="repair_type",
         create_type=False,
         checkfirst=True,
+        native_enum=True
     )
     repair_status = sa.Enum(
         "open", "in_progress", "closed",
         name="repair_status",
         create_type=False,
         checkfirst=True,
+        native_enum=True
     )
 
     # --- lines ---
