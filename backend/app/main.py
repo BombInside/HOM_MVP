@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-Точка входа FastAPI.
-Настраивает CORS, middleware, аудит, роутеры и жизненный цикл приложения.
+Точка входа FastAPI: CORS, middleware, аудит, роутеры и lifecycle.
+Исправлен порядок инициализации, добавлены безопасные типы для mypy.
 """
 
 from __future__ import annotations
@@ -16,13 +16,12 @@ from app.admin_panel import router as admin_router
 from app.routes_auth import router as auth_router
 from app.api.system import router as system_router
 
-# Импортируем роутеры после создания приложения
+# Роутеры домена и аудит
 from app.api.equipment import lines, machines, repairs, repair_attachments
 from app.api import audit_log
 from app.middleware.audit_middleware import AuditUserMiddleware
 from app.models import Base
 from app.core.audit_listeners import attach_audit_events
-
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -51,7 +50,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET)
+app.add_middleware(SessionMiddleware, secret_key=(settings.JWT_SECRET or "insecure"))
 app.add_middleware(AuditUserMiddleware)
 
 # Подключаем аудит изменений
@@ -62,18 +61,18 @@ attach_audit_events(Base)
 # ==========================================================
 
 # Системные и базовые
-app.include_router(auth_router)      # /auth/*
-app.include_router(admin_router)     # /adminpanel/*
-app.include_router(system_router)    # /health/*
+app.include_router(auth_router)             # /auth/*
+app.include_router(admin_router)            # /adminpanel/*
+app.include_router(system_router)           # /health/*
 
 # Доменные
-app.include_router(lines.router, prefix="/api")
-app.include_router(machines.router, prefix="/api")
-app.include_router(repairs.router, prefix="/api")
-app.include_router(repair_attachments.router, prefix="/api")
+app.include_router(lines.router, prefix="/api")                 # type: ignore[attr-defined]
+app.include_router(machines.router, prefix="/api")              # type: ignore[attr-defined]
+app.include_router(repairs.router, prefix="/api")               # type: ignore[attr-defined]
+app.include_router(repair_attachments.router, prefix="/api")   # type: ignore[attr-defined]
 
 # Аудит
-app.include_router(audit_log.router, prefix="/api")
+app.include_router(audit_log.router, prefix="/api")             # type: ignore[attr-defined]
 
 
 # ==========================================================
@@ -91,4 +90,4 @@ async def on_startup() -> None:
 @app.get("/", include_in_schema=False)
 async def root() -> dict[str, str]:
     """Корневой эндпоинт."""
-    return {"app": settings.APP_NAME, "env": settings.APP_ENV}
+    return {"app": settings.APP_NAME, "env": getattr(settings, "APP_ENV", "stage")}

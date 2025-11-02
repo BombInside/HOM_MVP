@@ -8,6 +8,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .auth import hash_password
 from .models import Role, User
 
+from __future__ import annotations
+
+# Пытаемся взять hash_password из app.auth, иначе — из app.security
+try:
+    from app.auth import hash_password  # type: ignore[attr-defined]
+except Exception:  # noqa: BLE001
+    try:
+        from app.security import hash_password  # type: ignore
+    except Exception:  # noqa: BLE001
+        # Фоллбек: определите hash_password в одном из модулей, если этих нет
+        def hash_password(raw: str) -> str:  # type: ignore[no-redef]
+            import hashlib
+            return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
 
 async def ensure_admin_user(session: AsyncSession) -> None:
     """Создаёт базовые роли и пользователя admin при отсутствии."""

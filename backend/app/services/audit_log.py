@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 """
-Сервис для получения записей из audit_log
+Сервис для получения записей из audit_log (список с фильтрацией).
 """
 
+from __future__ import annotations
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_
 from datetime import datetime
 from typing import List, Optional
 from app.models.audit_log import AuditLog
@@ -25,8 +26,6 @@ class AuditLogService:
         limit: int = 50,
     ) -> List[AuditLog]:
         stmt = select(AuditLog)
-
-        # фильтрация
         conditions = []
         if table_name:
             conditions.append(AuditLog.table_name == table_name)
@@ -38,10 +37,8 @@ class AuditLogService:
             conditions.append(AuditLog.timestamp >= from_date)
         if to_date:
             conditions.append(AuditLog.timestamp <= to_date)
-
         if conditions:
             stmt = stmt.where(and_(*conditions))
-
         stmt = stmt.order_by(AuditLog.timestamp.desc()).offset(skip).limit(limit)
         result = await db.execute(stmt)
         return list(result.scalars().all())

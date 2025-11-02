@@ -12,7 +12,7 @@ from sqlalchemy import select
 from fastapi import HTTPException
 from datetime import datetime
 
-ModelType = TypeVar("ModelType")  # SQLAlchemy модель
+ModelType = TypeVar("ModelType")           # SQLAlchemy модель
 CreateSchemaType = TypeVar("CreateSchemaType")
 UpdateSchemaType = TypeVar("UpdateSchemaType")
 
@@ -28,7 +28,7 @@ class CRUDServiceBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     # -------------------------
     async def create(self, db: AsyncSession, obj_in: CreateSchemaType) -> ModelType:
         obj_data: dict[str, Any]
-        if hasattr(obj_in, "model_dump"):
+        if hasattr(obj_in, "model_dump"):  # Pydantic v2
             obj_data = obj_in.model_dump()
         else:
             obj_data = cast(dict[str, Any], obj_in)
@@ -57,7 +57,8 @@ class CRUDServiceBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     async def list(self, db: AsyncSession, skip: int = 0, limit: int = 100) -> List[ModelType]:
         stmt = select(self.model)
         if hasattr(self.model, "deleted_at"):
-            stmt = stmt.where(self.model.deleted_at.is_(None))
+            # mypy не понимает динамику атрибутов моделей — добавляем ignore локально
+            stmt = stmt.where(getattr(self.model, "deleted_at").is_(None))  # type: ignore[attr-defined]
         result = await db.execute(stmt.offset(skip).limit(limit))
         return list(result.scalars().all())
 
@@ -68,7 +69,7 @@ class CRUDServiceBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
         db_obj = await self.get_or_404(db, obj_id)
 
         data: dict[str, Any]
-        if hasattr(obj_in, "model_dump"):
+        if hasattr(obj_in, "model_dump"):  # Pydantic v2
             data = obj_in.model_dump(exclude_unset=True)
         else:
             data = cast(dict[str, Any], obj_in)
@@ -90,9 +91,9 @@ class CRUDServiceBase(Generic[ModelType, CreateSchemaType, UpdateSchemaType]):
     async def soft_delete(self, db: AsyncSession, obj_id: int, deleted_by: Optional[int] = None) -> None:
         db_obj = await self.get_or_404(db, obj_id)
         if hasattr(db_obj, "deleted_at"):
-            db_obj.deleted_at = datetime.utcnow()
+            setattr(db_obj, "deleted_at", datetime.utcnow())
         if hasattr(db_obj, "deleted_by") and deleted_by:
-            db_obj.deleted_by = deleted_by
+            setattr(db_obj, "deleted_by", deleted_by)
         await db.commit()
 
     async def delete(self, db: AsyncSession, obj_id: int) -> None:
