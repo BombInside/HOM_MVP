@@ -32,7 +32,7 @@ class BaseModelMixin:
 
     deleted_by: Mapped[Optional[int]] = mapped_column(
         Integer,
-        ForeignKey("users.id", ondelete="SET NULL"),
+        ForeignKey("user.id", ondelete="SET NULL"),
         nullable=True,
     )
 
