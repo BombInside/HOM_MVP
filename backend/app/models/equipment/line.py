@@ -7,18 +7,26 @@ from app.models import Base
 from app.models.mixins import BaseModelMixin
 from .enums import LineStatus
 
+
 class Line(Base, BaseModelMixin):
+    """
+    Производственная линия.
+    """
     __tablename__ = "lines"
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     code: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     description: Mapped[Optional[str]] = mapped_column(Text)
+
+    # Исправлено: добавлен create_type=False для предотвращения повторного создания ENUM
     status: Mapped[LineStatus] = mapped_column(
-        Enum(LineStatus, name="line_status"),
+        Enum(LineStatus, name="line_status", create_type=False),
         nullable=False,
         default=LineStatus.working,
         server_default=LineStatus.working.value,
     )
+
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="1")
     notes: Mapped[Optional[str]] = mapped_column(Text)
 
