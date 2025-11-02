@@ -19,16 +19,48 @@ depends_on = None
 
 def upgrade() -> None:
     # --- enums (идемпотентное создание) ---
-    op.execute("DO $$ BEGIN CREATE TYPE line_status AS ENUM ('working','maintenance','stopped'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
-    op.execute("DO $$ BEGIN CREATE TYPE machine_status AS ENUM ('operational','broken','maintenance'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
-    op.execute("DO $$ BEGIN CREATE TYPE repair_type AS ENUM ('scheduled','unscheduled'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
-    op.execute("DO $$ BEGIN CREATE TYPE repair_status AS ENUM ('open','in_progress','closed'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
+    op.execute(
+        "DO $$ BEGIN CREATE TYPE line_status AS ENUM ('working','maintenance','stopped'); "
+        "EXCEPTION WHEN duplicate_object THEN null; END $$;"
+    )
+    op.execute(
+        "DO $$ BEGIN CREATE TYPE machine_status AS ENUM ('operational','broken','maintenance'); "
+        "EXCEPTION WHEN duplicate_object THEN null; END $$;"
+    )
+    op.execute(
+        "DO $$ BEGIN CREATE TYPE repair_type AS ENUM ('scheduled','unscheduled'); "
+        "EXCEPTION WHEN duplicate_object THEN null; END $$;"
+    )
+    op.execute(
+        "DO $$ BEGIN CREATE TYPE repair_status AS ENUM ('open','in_progress','closed'); "
+        "EXCEPTION WHEN duplicate_object THEN null; END $$;"
+    )
 
-    # Теперь можно использовать обычные Enum без create_type=False
-    line_status = sa.Enum("working", "maintenance", "stopped", name="line_status", checkfirst=True)
-    machine_status = sa.Enum("operational", "broken", "maintenance", name="machine_status", checkfirst=True)
-    repair_type = sa.Enum("scheduled", "unscheduled", name="repair_type", checkfirst=True)
-    repair_status = sa.Enum("open", "in_progress", "closed", name="repair_status", checkfirst=True)
+    # Теперь можно использовать Enum, не создавая тип повторно
+    line_status = sa.Enum(
+        "working", "maintenance", "stopped",
+        name="line_status",
+        create_type=False,
+        checkfirst=True,
+    )
+    machine_status = sa.Enum(
+        "operational", "broken", "maintenance",
+        name="machine_status",
+        create_type=False,
+        checkfirst=True,
+    )
+    repair_type = sa.Enum(
+        "scheduled", "unscheduled",
+        name="repair_type",
+        create_type=False,
+        checkfirst=True,
+    )
+    repair_status = sa.Enum(
+        "open", "in_progress", "closed",
+        name="repair_status",
+        create_type=False,
+        checkfirst=True,
+    )
 
     # --- lines ---
     op.create_table(
@@ -43,7 +75,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True),
     )
     op.create_index("ix_lines_code", "lines", ["code"], unique=True)
     op.create_index("ix_lines_is_active", "lines", ["is_active"], unique=False)
@@ -68,7 +100,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True),
     )
     op.create_index("ix_machines_line_id", "machines", ["line_id"], unique=False)
     op.create_index("ix_machines_status", "machines", ["status"], unique=False)
@@ -86,9 +118,9 @@ def upgrade() -> None:
         sa.Column("end_date", sa.DateTime(timezone=True), nullable=True),
         sa.Column("description", sa.Text(), nullable=True),
         sa.Column("actions_taken", sa.Text(), nullable=True),
-        sa.Column("performed_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
-        sa.Column("created_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="RESTRICT"), nullable=False),
-        sa.Column("updated_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("performed_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("created_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="RESTRICT"), nullable=False),
+        sa.Column("updated_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True),
         sa.Column("repair_type", repair_type, nullable=False, server_default="unscheduled"),
         sa.Column("status", repair_status, nullable=False, server_default="open"),
         sa.Column("cost", sa.Float(), nullable=True),
@@ -97,7 +129,7 @@ def upgrade() -> None:
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
-        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("deleted_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True),
     )
     op.create_index("ix_repairs_machine_id", "repairs", ["machine_id"], unique=False)
     op.create_index("ix_repairs_status", "repairs", ["status"], unique=False)
@@ -114,7 +146,7 @@ def upgrade() -> None:
         sa.Column("file_path", sa.String(length=512), nullable=False),
         sa.Column("mime_type", sa.String(length=128), nullable=True),
         sa.Column("size_bytes", sa.Integer(), nullable=True),
-        sa.Column("uploaded_by", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("uploaded_by", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL"), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
     )
     op.create_index("ix_repair_attachments_repair_id", "repair_attachments", ["repair_id"], unique=False)

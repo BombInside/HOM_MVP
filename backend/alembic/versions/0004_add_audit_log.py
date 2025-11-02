@@ -20,7 +20,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("table_name", sa.String(length=128), nullable=False),
         sa.Column("object_id", sa.Integer(), nullable=False),
-        sa.Column("user_id", sa.Integer(), sa.ForeignKey("users.id", ondelete="SET NULL")),
+        sa.Column("user_id", sa.Integer(), sa.ForeignKey("user.id", ondelete="SET NULL")),
         sa.Column("action", sa.String(length=32), nullable=False),
         sa.Column("old_data", sa.JSON(), nullable=True),
         sa.Column("new_data", sa.JSON(), nullable=True),
