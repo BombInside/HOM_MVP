@@ -19,7 +19,7 @@ class AuditLog(Base):
     table_name: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     object_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     user_id: Mapped[Optional[int]] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        Integer, ForeignKey("user.id", ondelete="SET NULL"), nullable=True
     )
     action: Mapped[str] = mapped_column(String(32), nullable=False)
     old_data: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
