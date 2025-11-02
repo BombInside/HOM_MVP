@@ -13,8 +13,26 @@ from .db import wait_for_db_ready, create_db_and_tables
 from .admin_panel import router as admin_router
 from .routes_auth import router as auth_router
 
-# ✅ Новый системный роутер /health
+# Новый системный роутер /health
 from .api.system import router as system_router
+
+from app.api.equipment import lines, machines, repairs
+
+app.include_router(lines.router, prefix="/api")
+app.include_router(machines.router, prefix="/api")
+app.include_router(repairs.router, prefix="/api")
+from app.api.equipment import repair_attachments
+
+app.include_router(repair_attachments.router, prefix="/api")
+
+from app.models import Base
+from app.core.audit_listeners import attach_audit_events
+from app.middleware.audit_middleware import AuditUserMiddleware
+
+app.add_middleware(AuditUserMiddleware)
+attach_audit_events(Base)
+
+
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -43,6 +61,11 @@ app.add_middleware(SessionMiddleware, secret_key=settings.JWT_SECRET)
 app.include_router(auth_router)     # /auth/*
 app.include_router(admin_router)    # /adminpanel/*
 app.include_router(system_router)   # /health/*
+
+from app.models import Base
+from app.core.audit_listeners import attach_audit_events
+
+attach_audit_events(Base)
 
 @app.on_event("startup")
 async def on_startup() -> None:
