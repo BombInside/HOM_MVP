@@ -1,38 +1,31 @@
 # -*- coding: utf-8 -*-
 """
 Инициализация подключения к БД (async SQLAlchemy) и фабрика сессий.
-Здесь же объявляется декларативная база моделей `Base`, чтобы Alembic и весь проект
-могли импортировать ее из единой точки: `from app.db import Base`.
+Теперь декларативная база моделей (`Base`) импортируется из app.models.base.
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
-from typing import AsyncGenerator, Optional, Callable
+from typing import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
-from sqlalchemy.orm import declarative_base
 from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
+from app.models.base import Base  # <-- единая точка истины
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # ======================================================
-# Декларативная база для всех ORM-моделей
+# Асинхронный движок и фабрика сессий
 # ======================================================
-Base = declarative_base()
-
-# ======================================================
-# Асинхронный движок и сессия
-# ======================================================
-# В конфиге используется DATABASE_URL (alias DB_URL) — оставляем как есть.
 DATABASE_URL = settings.DATABASE_URL
 
 engine = create_async_engine(
@@ -41,34 +34,30 @@ engine = create_async_engine(
     future=True,
 )
 
-# Фабрика асинхронных сессий
 async_session = async_sessionmaker(
     engine,
     expire_on_commit=False,
     class_=AsyncSession,
 )
 
-
+# ======================================================
+# Dependency для FastAPI
+# ======================================================
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    """
-    Dependency для FastAPI: выдать асинхронную сессию.
-    """
+    """Асинхронная сессия SQLAlchemy для FastAPI."""
     async with async_session() as session:
         yield session
 
 
 # ======================================================
-# Утилиты для старта приложения
+# Утилиты инициализации
 # ======================================================
 async def wait_for_db_ready(timeout_sec: int = 30) -> None:
-    """
-    Ожидание готовности БД. Не делает никаких DDL — только проверка доступности.
-    """
+    """Проверка доступности базы данных."""
     deadline = asyncio.get_event_loop().time() + timeout_sec
     while True:
         try:
             async with engine.begin() as conn:
-                # Небольшой no-op, чтобы убедиться в соединении
                 await conn.run_sync(lambda _: None)
             logger.info("✅ Database connection is ready.")
             return
@@ -80,12 +69,10 @@ async def wait_for_db_ready(timeout_sec: int = 30) -> None:
 
 
 async def create_db_and_tables() -> None:
-    """
-    Создание всех таблиц из метадаты моделей (когда это необходимо).
-    В проде обычно делается миграциями Alembic, но для дев-окружения удобно.
-    """
-    from app.models import Base as ModelsBase  # гарантируем, что все модели импортированы
-    assert ModelsBase is Base, "Ожидалось, что app.models.Base и app.db.Base — это один и тот же объект."
-
+    """Создание таблиц из всех импортированных моделей."""
+    from app.models import Base as ModelsBase
+    assert (
+        ModelsBase is Base
+    ), "Ожидалось, что app.models.Base и app.db.Base — это один и тот же объект."
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

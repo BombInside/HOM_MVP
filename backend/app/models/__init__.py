@@ -1,41 +1,23 @@
 # -*- coding: utf-8 -*-
 """
-Агрегатор всех ORM-моделей проекта.
-Импортирует Base и все модели, чтобы Alembic и FastAPI могли видеть их.
+Единая точка импорта для всех моделей проекта.
 """
-
-from __future__ import annotations
-
-# Базовый класс и модели пользователей, ролей и прав — из models.py
-from app.models.models import (
-    Base,
-    User,
-    Role,
-    UserRoleLink,
-    RolePermissionLink,
-    Permission,
-    AdminMenuLink,
-)
-
-# Модели производственного оборудования — из equipment.py
-from app.models.equipment import (
-    Line,
-    Machine,
-    Repair,
-    RepairAttachment,
-)
+from app.models.base import Base
+from app.models.user import User
+from app.models.role import Role
+from app.models.permission import Permission
+from app.models.links import UserRoleLink, RolePermissionLink
+from app.models.admin_menu_link import AdminMenuLink
+from app.models.equipment import Line, Machine, Repair, RepairAttachment
 
 __all__ = [
-    # база
     "Base",
-    # пользователи / роли / права
     "User",
     "Role",
+    "Permission",
     "UserRoleLink",
     "RolePermissionLink",
-    "Permission",
     "AdminMenuLink",
-    # оборудование
     "Line",
     "Machine",
     "Repair",
