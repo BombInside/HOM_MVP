@@ -18,16 +18,17 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # --- enums ---
-    line_status = sa.Enum("working", "maintenance", "stopped", name="line_status", create_type=False)
-    machine_status = sa.Enum("operational", "broken", "maintenance", name="machine_status", create_type=False)
-    repair_type = sa.Enum("scheduled", "unscheduled", name="repair_type", create_type=False)
-    repair_status = sa.Enum("open", "in_progress", "closed", name="repair_status", create_type=False)
+    # --- enums (идемпотентное создание) ---
+    op.execute("DO $$ BEGIN CREATE TYPE line_status AS ENUM ('working','maintenance','stopped'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
+    op.execute("DO $$ BEGIN CREATE TYPE machine_status AS ENUM ('operational','broken','maintenance'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
+    op.execute("DO $$ BEGIN CREATE TYPE repair_type AS ENUM ('scheduled','unscheduled'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
+    op.execute("DO $$ BEGIN CREATE TYPE repair_status AS ENUM ('open','in_progress','closed'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
 
-    line_status.create(op.get_bind(), checkfirst=True)
-    machine_status.create(op.get_bind(), checkfirst=True)
-    repair_type.create(op.get_bind(), checkfirst=True)
-    repair_status.create(op.get_bind(), checkfirst=True)
+    # Теперь можно использовать обычные Enum без create_type=False
+    line_status = sa.Enum("working", "maintenance", "stopped", name="line_status")
+    machine_status = sa.Enum("operational", "broken", "maintenance", name="machine_status")
+    repair_type = sa.Enum("scheduled", "unscheduled", name="repair_type")
+    repair_status = sa.Enum("open", "in_progress", "closed", name="repair_status")
 
     # --- lines ---
     op.create_table(
@@ -121,29 +122,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     op.drop_table("repair_attachments")
-    op.drop_index("ix_repairs_created_at", table_name="repairs")
-    op.drop_index("ix_repairs_asset_number", table_name="repairs")
-    op.drop_index("ix_repairs_type", table_name="repairs")
-    op.drop_index("ix_repairs_status", table_name="repairs")
-    op.drop_index("ix_repairs_machine_id", table_name="repairs")
     op.drop_table("repairs")
-
-    op.drop_index("ix_machines_serial_number", table_name="machines")
-    op.drop_index("ix_machines_asset_number", table_name="machines")
-    op.drop_index("ix_machines_active", table_name="machines")
-    op.drop_index("ix_machines_status", table_name="machines")
-    op.drop_index("ix_machines_line_id", table_name="machines")
     op.drop_table("machines")
-
-    op.drop_index("ix_lines_status", table_name="lines")
-    op.drop_index("ix_lines_is_active", table_name="lines")
-    op.drop_index("ix_lines_code", table_name="lines")
     op.drop_table("lines")
 
-    # enums
-    op.execute("DO $$ BEGIN CREATE TYPE line_status AS ENUM ('working', 'maintenance', 'stopped'); EXCEPTION WHEN duplicate_object THEN null; END $$;")
-
-    op.execute("DROP TYPE IF EXISTS line_status")
-    op.execute("DROP TYPE IF EXISTS machine_status")
-    op.execute("DROP TYPE IF EXISTS repair_type")
-    op.execute("DROP TYPE IF EXISTS repair_status")
+    op.execute("DROP TYPE IF EXISTS line_status CASCADE;")
+    op.execute("DROP TYPE IF EXISTS machine_status CASCADE;")
+    op.execute("DROP TYPE IF EXISTS repair_type CASCADE;")
+    op.execute("DROP TYPE IF EXISTS repair_status CASCADE;")
