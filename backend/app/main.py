@@ -32,6 +32,9 @@ from app.middleware.audit_middleware import AuditUserMiddleware
 app.add_middleware(AuditUserMiddleware)
 attach_audit_events(Base)
 
+from app.api import audit_log
+
+app.include_router(audit_log.router, prefix="/api")
 
 
 logger = logging.getLogger(__name__)
