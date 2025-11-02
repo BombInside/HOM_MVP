@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.sessions import SessionMiddleware
 
 from app.config import get_settings
-from app.db import wait_for_db_ready, create_db_and_tables
+from app.db import wait_for_db_ready #, create_db_and_tables
 from app.admin_panel import router as admin_router
 from app.routes_auth import router as auth_router
 from app.api.system import router as system_router

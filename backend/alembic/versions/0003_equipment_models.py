@@ -36,34 +36,36 @@ def upgrade() -> None:
         "EXCEPTION WHEN duplicate_object THEN null; END $$;"
     )
 
-    # Теперь можно использовать Enum, не создавая тип повторно
+    # --- вручную регистрируем типы в SQLAlchemy, чтобы Alembic не пытался их пересоздать ---
+    from sqlalchemy.dialects.postgresql import ENUM
+    bind = op.get_bind()
+    for tname in ["line_status", "machine_status", "repair_type", "repair_status"]:
+        ENUM(name=tname, create_type=False).create(bind, checkfirst=True)
+
+    # --- объявляем Enum'ы, не создавая типы повторно ---
     line_status = sa.Enum(
         "working", "maintenance", "stopped",
         name="line_status",
         create_type=False,
-        checkfirst=True,
-        native_enum=True
+        native_enum=True,
     )
     machine_status = sa.Enum(
         "operational", "broken", "maintenance",
         name="machine_status",
         create_type=False,
-        checkfirst=True,
-        native_enum=True
+        native_enum=True,
     )
     repair_type = sa.Enum(
         "scheduled", "unscheduled",
         name="repair_type",
         create_type=False,
-        checkfirst=True,
-        native_enum=True
+        native_enum=True,
     )
     repair_status = sa.Enum(
         "open", "in_progress", "closed",
         name="repair_status",
         create_type=False,
-        checkfirst=True,
-        native_enum=True
+        native_enum=True,
     )
 
     # --- lines ---

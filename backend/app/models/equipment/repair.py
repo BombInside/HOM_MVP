@@ -30,13 +30,13 @@ class Repair(Base, BaseModelMixin):
 
     # Исправлено: добавлен create_type=False для избежания DuplicateObjectError
     repair_type: Mapped[RepairType] = mapped_column(
-        Enum(RepairType, name="repair_type", create_type=False),
+        Enum(RepairType, name="repair_type", create_type=False, native_enum=True),
         nullable=False,
         default=RepairType.unscheduled,
         server_default=RepairType.unscheduled.value,
     )
     status: Mapped[RepairStatus] = mapped_column(
-        Enum(RepairStatus, name="repair_status", create_type=False),
+        Enum(RepairStatus, name="repair_status", create_type=False, native_enum=True),
         nullable=False,
         default=RepairStatus.open,
         server_default=RepairStatus.open.value,

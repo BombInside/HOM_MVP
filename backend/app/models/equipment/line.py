@@ -21,7 +21,7 @@ class Line(Base, BaseModelMixin):
 
     # Исправлено: добавлен create_type=False для предотвращения повторного создания ENUM
     status: Mapped[LineStatus] = mapped_column(
-        Enum(LineStatus, name="line_status", create_type=False),
+        Enum(LineStatus, name="line_status", create_type=False, native_enum=True),
         nullable=False,
         default=LineStatus.working,
         server_default=LineStatus.working.value,
