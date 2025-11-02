@@ -14,7 +14,7 @@ revision = ${repr(up_revision)}
 down_revision = ${repr(down_revision)}
 branch_labels = ${repr(branch_labels)}
 depends_on = ${repr(depends_on)}
-
+from app.db.pg_utils import create_enum_safe, drop_enum_safe
 
 def upgrade() -> None:
     ${upgrades if upgrades else "pass"}
