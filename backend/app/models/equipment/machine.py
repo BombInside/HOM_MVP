@@ -19,7 +19,7 @@ class Machine(Base, BaseModelMixin):
     model: Mapped[Optional[str]] = mapped_column(String(128))
     type: Mapped[Optional[str]] = mapped_column(String(128))
     status: Mapped[MachineStatus] = mapped_column(
-        Enum(MachineStatus, name="machine_status"),
+        Enum(MachineStatus, name="machine_status", create_type=False),
         nullable=False,
         default=MachineStatus.operational,
         server_default=MachineStatus.operational.value,
