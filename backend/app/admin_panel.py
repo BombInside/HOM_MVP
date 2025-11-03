@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Роуты для админ-панели (bootstrap создания первого администратора).
-Только фикс импортов моделей, логика эндпоинтов не менялась.
+Исправлено: корректная работа с паролем, фиксы ошибок валидации.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field
 
 from app.db import get_session
-from app.models import User, Role, UserRoleLink  
+from app.models import User, Role, UserRoleLink
 
 router = APIRouter(prefix="/adminpanel", tags=["Admin"])
 
@@ -20,7 +20,7 @@ router = APIRouter(prefix="/adminpanel", tags=["Admin"])
 class AdminBootstrapIn(BaseModel):
     email: EmailStr
     password: str = Field(min_length=8, max_length=128)
-    full_name: str = Field(min_length=2, max_length=128)
+    full_name: str | None = Field(None, min_length=2, max_length=128)
 
 
 @router.post("/bootstrap", status_code=status.HTTP_201_CREATED)
@@ -32,9 +32,9 @@ async def admin_bootstrap(
     Одноразовое создание первого администратора и роли Admin.
     Если уже существует — вернёт 409.
     """
-    # существует ли хоть один пользователь?
-    exists = await db.execute(select(User.id).limit(1))
-    if exists.scalar_one_or_none() is not None:
+    # проверяем, есть ли уже пользователь
+    exists = await db.scalar(select(User.id).limit(1))
+    if exists is not None:
         raise HTTPException(status_code=409, detail="Already initialized")
 
     # ищем/создаём роль Admin
@@ -45,15 +45,22 @@ async def admin_bootstrap(
         await db.flush()
 
     # создаём пользователя
-    # предполагается, что пароль будет захеширован внутри модели/сервиса
-    user = User(email=data.email, full_name=data.full_name)
-    user.set_password(data.password)  # используй свою реализацию
+    user = User(email=data.email)
+    user.set_password(data.password)
+    user.is_admin = True
+    user.is_active = True
+
     db.add(user)
     await db.flush()
 
-    # линк пользователь-роль
+    # связываем с ролью
     link = UserRoleLink(user_id=user.id, role_id=role_admin.id)
     db.add(link)
 
     await db.commit()
-    return {"message": "Admin user created", "user_id": user.id, "role_id": role_admin.id}
+
+    return {
+        "message": "Admin user created",
+        "user_id": user.id,
+        "role_id": role_admin.id,
+    }
