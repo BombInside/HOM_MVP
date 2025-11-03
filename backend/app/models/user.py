@@ -22,3 +22,18 @@ class User(Base):
     )
     def __repr__(self) -> str:
         return f"<User {self.email}>"
+    
+    def set_password(self, raw_password: str) -> None:
+        self.password_hash = hash_password(raw_password)
+
+    def check_password(self, raw_password: str) -> bool:
+        return verify_password(raw_password, self.password_hash)
+
+    def __repr__(self) -> str:
+        return f"<User id={self.id} email={self.email} admin={self.is_admin}>"
+    
+    roles: Mapped[List["Role"]] = relationship(
+        secondary="user_role_link",
+        back_populates="user",  # исправлено
+        lazy="selectin",
+    )

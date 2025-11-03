@@ -12,7 +12,7 @@ from sqlalchemy import select
 from pydantic import BaseModel, EmailStr, Field
 
 from app.db import get_session
-from app.models import User, Role, UserRoleLink  # <-- исправленный импорт
+from app.models import User, Role, UserRoleLink  
 
 router = APIRouter(prefix="/adminpanel", tags=["Admin"])
 
