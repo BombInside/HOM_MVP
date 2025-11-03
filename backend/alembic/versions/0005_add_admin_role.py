@@ -106,4 +106,4 @@ def upgrade() -> None:
 def downgrade() -> None:
     connection = op.get_bind()
     connection.execute(sa.text("DELETE FROM role WHERE name='Admin'"))
-    print("❌ Removed Admin role")
+    print("❌ Removed Admin role!")
