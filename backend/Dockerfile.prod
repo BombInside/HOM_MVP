@@ -1,0 +1,31 @@
+FROM python:3.11-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+WORKDIR /app
+
+# системные зависимости
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    netcat-openbsd \
+    dos2unix \
+    build-essential \
+    postgresql-client \
+    redis-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+# зависимости
+COPY backend/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r /app/requirements.txt
+
+# приложение
+COPY backend /app
+
+# убедиться, что entrypoint в LF
+RUN chmod +x /app/entrypoint.sh && dos2unix /app/entrypoint.sh
+
+EXPOSE 8000
+
+# без --reload для prod
+CMD ["/app/entrypoint.sh", "prod"]

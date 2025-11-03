@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Роли и разрешения{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4 text-center">Управление ролями</h2>
+
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5>Список ролей</h5>
+        <a href="/adminpanel/roles/new" class="btn btn-primary btn-sm">➕ Добавить роль</a>
+    </div>
+
+    {% if roles %}
+    <table class="table table-striped align-middle shadow-sm">
+        <thead class="table-light">
+            <tr>
+                <th>Название роли</th>
+                <th>Описание</th>
+                <th>Разрешения</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for role in roles %}
+            <tr>
+                <td><strong>{{ role.name }}</strong></td>
+                <td>{{ role.description or '—' }}</td>
+                <td>
+                    {% if role.permissions %}
+                        {% for perm in role.permissions %}
+                            <span class="badge bg-secondary me-1">{{ perm.name }}</span>
+                        {% endfor %}
+                    {% else %}
+                        <span class="text-muted">нет прав</span>
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="alert alert-info text-center">
+        <p>Пока нет ни одной роли. <a href="/adminpanel/roles/new">Создать первую роль</a>.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

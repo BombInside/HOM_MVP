@@ -1,0 +1,120 @@
+name: Deploy
+
+on:
+  push:
+    branches: ["main"]
+
+jobs:
+  deploy-stage:
+    runs-on: ubuntu-latest
+
+    steps:
+      # --- Клонирование репозитория ---
+      - uses: actions/checkout@v4
+
+      # --- Настройка SSH ---
+      - name: Setup SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "$REMOTE_HOST" >> ~/.ssh/known_hosts
+
+      # --- Проверка секретов ---
+      - name: Validate required secrets
+        env:
+          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
+          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
+          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
+          FRONTEND_API_URL: ${{ secrets.FRONTEND_API_URL }}
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          echo "🔍 Validating secrets..."
+          REQUIRED_VARS=("DB_URL_STAGE" "JWT_SECRET_STAGE" "CORS_ORIGINS_STAGE" "FRONTEND_API_URL" "REMOTE_HOST")
+          for VAR in "${REQUIRED_VARS[@]}"; do
+            VALUE="${!VAR}"
+            if [ -z "$VALUE" ]; then
+              echo "❌ Missing secret: $VAR"
+              exit 1
+            fi
+            echo "✅ $VAR present"
+          done
+          echo "✅ All required secrets are set."
+
+      # --- Загрузка проекта на сервер ---
+      - name: Push repo to droplet
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          echo "📦 Syncing project to droplet..."
+          rsync -az --delete \
+            --exclude ".git" \
+            --exclude "node_modules" \
+            ./ "deployer@$REMOTE_HOST:/home/deployer/dev/hom_mvp"
+
+      # --- Создание .env.stage для backend ---
+      - name: Write backend .env.stage
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          DB_URL_STAGE: ${{ secrets.DB_URL_STAGE }}
+          JWT_SECRET_STAGE: ${{ secrets.JWT_SECRET_STAGE }}
+          CORS_ORIGINS_STAGE: ${{ secrets.CORS_ORIGINS_STAGE }}
+        run: |
+          echo "🧩 Writing backend .env.stage..."
+          ssh "deployer@${REMOTE_HOST}" bash -lc "
+            set -e
+            cd /home/deployer/dev/hom_mvp
+            cat > .env.stage <<EOF
+            APP_ENV=stage
+            DB_URL=${DB_URL_STAGE}
+            JWT_SECRET=${JWT_SECRET_STAGE}
+            JWT_EXPIRE_MIN=60
+            CORS_ORIGINS=${CORS_ORIGINS_STAGE}
+            REDIS_URL=redis://redis:6379
+            EOF
+          "
+
+      # --- Создание .env.stage для frontend ---
+      - name: Write frontend .env.stage
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+          FRONTEND_API_URL: ${{ secrets.FRONTEND_API_URL }}
+        run: |
+          echo "🧩 Writing frontend .env.stage..."
+          ssh "deployer@${REMOTE_HOST}" bash -lc "
+            set -e
+            cd /home/deployer/dev/hom_mvp/frontend
+            cat > .env.stage <<EOF
+            VITE_API_URL=/api
+            VITE_APP_ENV=stage
+            EOF
+          "
+
+      # --- Пересборка и деплой ---
+      - name: Compose up (stage)
+        env:
+          REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
+        run: |
+          echo "🚀 Deploying application..."
+          ssh "deployer@${REMOTE_HOST}" bash -lc '
+            set -e
+            cd /home/deployer/dev/hom_mvp
+
+            echo "🧱 Pulling latest images..."
+            docker compose -f docker-compose.stage.yml pull || true
+
+            echo "🔁 Rebuilding backend and frontend..."
+            docker compose -f docker-compose.stage.yml build backend frontend
+
+            echo "🚀 Starting containers..."
+            docker compose -f docker-compose.stage.yml up -d --remove-orphans
+
+            echo "🔍 Checking status..."
+            docker compose -f docker-compose.stage.yml ps
+
+            echo "📜 Showing last backend logs..."
+            docker compose -f docker-compose.stage.yml logs backend --tail 40 || true
+          '

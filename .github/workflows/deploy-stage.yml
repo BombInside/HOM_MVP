@@ -1,0 +1,49 @@
+name: Deploy to Stage
+
+on:
+  push:
+    branches:
+      - stage
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker-compose.stage.yml"
+      - ".github/workflows/deploy-stage.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.STAGE_SSH_KEY }}
+
+      - name: Deploy to Stage Server
+        run: |
+          echo "🚀 Deploying H.O.M to Stage server..."
+
+          ssh -o StrictHostKeyChecking=no deployer@${{ secrets.STAGE_HOST }} << 'EOF'
+            set -e
+
+            cd ~/dev/hom_mvp
+            echo "📦 Pulling latest code..."
+            git fetch origin stage && git reset --hard origin/stage
+
+            echo "🧩 Creating/updating frontend .env.stage"
+            cat > frontend/.env.stage <<EOT
+            VITE_API_URL=/api
+            VITE_APP_ENV=stage
+            EOT
+
+            echo "🔧 Building and restarting containers..."
+            docker compose -f docker-compose.stage.yml pull
+            docker compose -f docker-compose.stage.yml build --no-cache frontend backend
+            docker compose -f docker-compose.stage.yml up -d --remove-orphans
+
+            echo "✅ Deployment finished successfully."
+          EOF

@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <title>Админ-панель</title>
+  <link href="https://cdn.jsdelivr.net/npm/tailwindcss@3.4.4/dist/tailwind.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen flex flex-col">
+
+  <!-- Верхняя панель -->
+  <header class="bg-sky-700 text-white py-4 shadow-md">
+    <div class="max-w-6xl mx-auto px-4 flex justify-between items-center">
+      <h1 class="text-2xl font-semibold">Админ-панель</h1>
+      <nav class="space-x-4">
+        <a href="/adminpanel" class="hover:underline">Главная</a>
+        <a href="/adminpanel/roles" class="hover:underline">Роли и права</a>
+        <a href="/adminpanel/logout" class="hover:underline text-red-200">Выход</a>
+      </nav>
+    </div>
+  </header>
+
+  <!-- Контент -->
+  <main class="flex-grow max-w-6xl mx-auto p-6">
+    <div class="bg-white rounded-2xl shadow p-6 mb-8">
+      <h2 class="text-xl font-bold text-gray-800 mb-2">Добро пожаловать, {{ user.email }}</h2>
+      <p class="text-gray-600 mb-4">Вы вошли как администратор.</p>
+      <div class="flex flex-wrap gap-4">
+        <a href="/adminpanel/roles"
+           class="bg-sky-600 text-white px-5 py-3 rounded-lg shadow hover:bg-sky-700 transition">
+          Управление ролями
+        </a>
+        <a href="/adminpanel/users"
+           class="bg-green-600 text-white px-5 py-3 rounded-lg shadow hover:bg-green-700 transition">
+          Пользователи (в разработке)
+        </a>
+        <a href="/adminpanel/settings"
+           class="bg-yellow-500 text-white px-5 py-3 rounded-lg shadow hover:bg-yellow-600 transition">
+          Настройки (в разработке)
+        </a>
+      </div>
+    </div>
+
+    <div class="grid md:grid-cols-2 gap-6">
+      <!-- Карточка состояния системы -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">Состояние системы</h3>
+        <p class="text-gray-600 text-sm">Все сервисы работают штатно ✅</p>
+      </div>
+
+      <!-- Карточка активности -->
+      <div class="bg-white rounded-2xl shadow p-6">
+        <h3 class="text-lg font-semibold text-gray-800 mb-2">Последние действия</h3>
+        <ul class="text-gray-600 text-sm list-disc list-inside">
+          <li>Вход в систему: {{ user.email }}</li>
+          <li>Обновление ролей: доступно для администратора</li>
+          <li>Создание пользователей: планируется</li>
+        </ul>
+      </div>
+    </div>
+  </main>
+
+  <!-- Нижний колонтитул -->
+  <footer class="bg-gray-200 text-gray-600 text-sm py-4 mt-auto">
+    <div class="max-w-6xl mx-auto text-center">
+      © {{ datetime.utcnow().year }} Панель администратора. Все права защищены.
+    </div>
+  </footer>
+
+</body>
+</html>

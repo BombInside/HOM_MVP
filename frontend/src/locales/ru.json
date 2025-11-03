@@ -1,0 +1,23 @@
+{
+  "login": {
+    "title": "Вход",
+    "email": "Email",
+    "password": "Пароль",
+    "submit": "Войти"
+  },
+  "dashboard": {
+    "title": "Панель управления"
+  },
+  "roles": {
+    "title": "Роли",
+    "create": "Создание роли",
+    "name": "Название",
+    "description": "Описание",
+    "permissions": "Права (через запятую)",
+    "add": "Добавить",
+    "save": "Сохранить",
+    "delete": "Удалить",
+    "no_roles": "Нет ролей",
+    "loading": "Загрузка..."
+  }
+}

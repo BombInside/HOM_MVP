@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Создание новой роли{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2 class="mb-4 text-center">Создание новой роли</h2>
+
+    <form method="post" action="/adminpanel/roles/new" class="shadow-sm p-4 bg-light rounded">
+        <div class="mb-3">
+            <label for="name" class="form-label">Название роли</label>
+            <input type="text" class="form-control" id="name" name="name" required placeholder="Например: moderator">
+        </div>
+
+        <div class="mb-3">
+            <label for="description" class="form-label">Описание</label>
+            <textarea class="form-control" id="description" name="description" rows="2" placeholder="Опишите назначение роли"></textarea>
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">Разрешения (Permissions)</label>
+            <div class="row">
+                {% for perm in permissions %}
+                <div class="col-md-4 col-sm-6 mb-2">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="permissions" id="perm_{{ perm.id }}" value="{{ perm.id }}">
+                        <label class="form-check-label" for="perm_{{ perm.id }}">{{ perm.name }}</label>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-between">
+            <a href="/adminpanel/roles" class="btn btn-outline-secondary">⬅ Назад</a>
+            <button type="submit" class="btn btn-success">💾 Сохранить роль</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
