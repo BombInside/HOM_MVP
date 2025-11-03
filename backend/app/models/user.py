@@ -6,6 +6,8 @@ from sqlalchemy import String, Boolean, DateTime, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .base import Base
 
+from app.security import hash_password, verify_password
+
 class User(Base):
     __tablename__ = "user"
     __table_args__ = (UniqueConstraint("email", name="uq_user_email"),)
