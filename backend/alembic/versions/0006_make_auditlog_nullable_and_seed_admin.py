@@ -6,7 +6,7 @@ from datetime import datetime
 
 # revision identifiers
 revision = "0006_make_auditlog_nullable_and_seed_admin"
-down_revision = "0005_add_admin_role"
+down_revision = "0005_seed_admin_role"
 branch_labels = None
 depends_on = None
 
