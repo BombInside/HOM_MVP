@@ -8,10 +8,6 @@ from app.core.audit_context import current_user_id
 
 LINK_TABLES = {"user_role_link", "role_permission_link"}
 
-def attach_audit_events():
-    """Backward compatibility placeholder — events are auto-attached via decorators."""
-    pass
-
 def _jsonify(v: Any):
     if isinstance(v, datetime):
         return v.isoformat()

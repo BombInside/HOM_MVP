@@ -21,7 +21,7 @@ from app.api.equipment import lines, machines, repairs, repair_attachments
 from app.api import audit_log
 from app.middleware.audit_middleware import AuditUserMiddleware
 from app.models import Base
-from app.core.audit_listeners import attach_audit_events
+#from app.core.audit_listeners import attach_audit_events 
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -54,7 +54,7 @@ app.add_middleware(SessionMiddleware, secret_key=(settings.JWT_SECRET or "insecu
 app.add_middleware(AuditUserMiddleware)
 
 # Подключаем аудит изменений
-attach_audit_events(Base)
+#attach_audit_events(Base)
 
 # ==========================================================
 # Роутеры
