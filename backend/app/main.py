@@ -15,6 +15,8 @@ from app.db import wait_for_db_ready
 from app.admin_panel import router as admin_router
 from app.routes_auth import router as auth_router
 from app.api.system import router as system_router
+# НОВЫЙ ИМПОРТ: Роутер для управления ролями
+from app.api.adminpanel import roles as roles_router 
 
 # Роутеры домена и аудит
 from app.api.equipment import lines, machines, repairs, repair_attachments
@@ -64,6 +66,9 @@ app.add_middleware(AuditUserMiddleware)
 app.include_router(auth_router)             # /auth/*
 app.include_router(admin_router)            # /adminpanel/*
 app.include_router(system_router)           # /health/*
+
+# ДОБАВЛЕНО: Роутер для управления ролями и правами
+app.include_router(roles_router.router, prefix="/adminpanel") # type: ignore[attr-defined]
 
 # Доменные
 app.include_router(lines.router, prefix="/api")                 # type: ignore[attr-defined]

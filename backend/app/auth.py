@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlmodel import select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .config import get_settings
@@ -17,7 +17,8 @@ from .models import User
 from .security import verify_password
 
 settings = get_settings()
-bearer = HTTPBearer(auto_error=False)
+# Используем auto_error=False, чтобы middleware мог перехватить ошибку 401, если нужно
+bearer = HTTPBearer(auto_error=False) 
 
 
 def create_access_token(sub: str, expires_minutes: Optional[int] = None) -> str:
@@ -69,3 +70,13 @@ async def get_current_user(
         return user
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+
+
+async def admin_required(current_user: Annotated[User, Depends(get_current_user)]) -> User:
+    """Dependency для проверки прав администратора."""
+    if not getattr(current_user, "is_admin", False):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Operation requires administrator privileges",
+        )
+    return current_user
