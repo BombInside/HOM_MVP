@@ -13,9 +13,10 @@ const Login = () => {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    // ИСПРАВЛЕНО: Теперь вызывается корректно с payload { email, password }
+    // Вызываем thunk с объектом payload.
     const res = await dispatch(login({ email, password })); 
-    if (res.meta.requestStatus === "fulfilled") { // Убран (res as any)
+    // ИСПРАВЛЕНИЕ: Используем корректный тип res.
+    if (res.meta.requestStatus === "fulfilled") { 
       const to = (loc.state as any)?.from || "/adminpanel";
       nav(to);
     }

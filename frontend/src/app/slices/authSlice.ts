@@ -1,5 +1,3 @@
-// frontend/src/app/slices/authSlice.ts
-
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../../api";
 
@@ -14,21 +12,43 @@ type AuthState = {
   user: User | null;
   loading: boolean;
   error: string | null;
-  isAuthResolved: boolean; // <--- ДОБАВЛЕНО
+  isAuthResolved: boolean; // Флаг для избежания гонки
 };
 
-const initialToken = localStorage.getItem("token"); // <--- ИЗМЕНЕНО
+const initialToken = localStorage.getItem("token");
  
 const initialState: AuthState = {
   accessToken: initialToken,
   user: null,
   loading: false,
   error: null,
-  isAuthResolved: !initialToken, // <--- ИЗМЕНЕНО: Если нет токена, считаем, что статус уже разрешен. Если есть, ждем fetchCurrentUser.
+  isAuthResolved: !initialToken, // Если нет токена, считаем, что статус разрешен
 };
 
-export const login = createAsyncThunk(
-// ...
+// ИСПРАВЛЕНИЕ: Используем явную типизацию <Return, Payload, Config>
+export const login = createAsyncThunk<
+  // 1. Return type
+  { access_token: string, user: User, token_type: string }, 
+  // 2. Payload (Input) type
+  { email: string; password: string }, 
+  // 3. Config type
+  { rejectValue: string } 
+>(
+  "auth/login",
+  async ({ email, password }, { rejectWithValue }) => {
+    try {
+      const { data } = await api.post("/auth/login", { email, password });
+      if (data?.access_token) localStorage.setItem("token", data.access_token);
+      return data;
+    } catch (err: any) {
+      const msg =
+        err?.response?.data?.detail ||
+        err?.response?.data?.message ||
+        err?.message ||
+        "Login failed";
+      return rejectWithValue(msg);
+    }
+  }
 );
 
 export const fetchCurrentUser = createAsyncThunk("auth/me", async (_, { rejectWithValue }) => {
@@ -50,7 +70,7 @@ const slice = createSlice({
       state.user = null;
       state.error = null;
       state.loading = false;
-      state.isAuthResolved = true; // <--- ИЗМЕНЕНО: Выход - это разрешенное состояние.
+      state.isAuthResolved = true;
       localStorage.removeItem("token");
     },
   },
@@ -59,31 +79,32 @@ const slice = createSlice({
       .addCase(login.pending, (s) => {
         s.loading = true;
         s.error = null;
-        s.isAuthResolved = false; // <--- ИЗМЕНЕНО: Логин - неразрешенное состояние
+        s.isAuthResolved = false;
       })
       .addCase(login.fulfilled, (s, action: any) => {
         s.loading = false;
         s.error = null;
         s.accessToken = action.payload?.access_token || null;
         s.user = action.payload?.user || null;
-        s.isAuthResolved = true; // <--- ИЗМЕНЕНО: Успех - разрешенное состояние
+        s.isAuthResolved = true;
       })
       .addCase(login.rejected, (s, action: any) => {
         s.loading = false;
         s.error = action.payload || "Login failed";
-        s.isAuthResolved = true; // <--- ИЗМЕНЕНО: Провал - разрешенное состояние
+        s.isAuthResolved = true;
       })
       .addCase(fetchCurrentUser.fulfilled, (s, action: any) => {
         s.user = action.payload || null;
-        s.isAuthResolved = true; // <--- ИЗМЕНЕНО: Успешно загружено - разрешенное состояние
+        s.isAuthResolved = true;
         if (s.accessToken == null) {
-          // ...
+          // если пришёл user, а токена нет — ничего не делаем;
+          // (обычно сюда попадём только с токеном)
         }
       })
       .addCase(fetchCurrentUser.rejected, (s) => {
         s.user = null;
         s.accessToken = null;
-        s.isAuthResolved = true; // <--- ИЗМЕНЕНО: Ошибка токена - разрешенное состояние
+        s.isAuthResolved = true;
       });
   },
 });
