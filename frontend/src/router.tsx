@@ -6,18 +6,23 @@ import { fetchCurrentUser } from "./app/slices/authSlice";
 import Login from "./pages/Login";
 import AdminBootstrap from "./pages/Admin/AdminBootstrap";
 import Dashboard from "./pages/Admin/Dashboard";
+import RoleEditor from "./pages/Admin/RoleEditor";
+import UserManager from "./pages/Admin/UserManager";
+
+// Импорт макетов
+import AdminLayout from "./layouts/AdminLayout";
+import AuthLayout from "./layouts/AuthLayout"; // Используем AuthLayout для Login, если он существует
 
 // НОВОЕ: Компонент загрузки
 const AuthLoading = () => (
     <div className="min-h-screen flex items-center justify-center text-xl text-gray-500">Загрузка...</div>
 );
 
+// Защита: наличие токена
 function ProtectedRoute({ children }: { children: JSX.Element }) {
-  // ИЗМЕНЕНО: используем isAuthResolved
   const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth);
   const loc = useLocation();
 
-  // НОВОЕ: Ждем разрешения статуса, чтобы избежать гонки
   if (!isAuthResolved) {
     return <AuthLoading />;
   }
@@ -28,49 +33,58 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
   return children;
 }
 
+// Защита: наличие прав администратора
 function AdminRoute({ children }: { children: JSX.Element }) {
-  // ИЗМЕНЕНО: используем isAuthResolved
   const { user, isAuthResolved } = useAppSelector((s) => s.auth);
 
-  // НОВОЕ: Ждем разрешения статуса, чтобы избежать гонки
   if (!isAuthResolved) {
     return <AuthLoading />;
   }
 
-  // Теперь эта проверка сработает только после загрузки объекта user
   if (!user?.is_admin) return <Navigate to="/login" replace />;
   return children;
 }
 
 function AppInner() {
   const dispatch = useAppDispatch();
-  // ИЗМЕНЕНО: используем isAuthResolved
   const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth); 
 
   // тихий автологин по токену
   useEffect(() => {
-    // ИЗМЕНЕНО: Запускаем только если есть токен и статус не разрешен
     if (accessToken && !isAuthResolved) {
       dispatch(fetchCurrentUser());
     }
-  }, [accessToken, isAuthResolved, dispatch]); // ИЗМЕНЕНО: Зависимость от isAuthResolved
+  }, [accessToken, isAuthResolved, dispatch]); 
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-      {/* bootstrap публичный */}
+      
+      {/* Публичные маршруты (обернуты в AuthLayout, если он нужен) */}
+      <Route path="/login" element={<AuthLayout><Login /></AuthLayout>} />
       <Route path="/adminpanel/bootstrap" element={<AdminBootstrap />} />
-      {/* админ только для авторизованных и is_admin */}
-      <Route
-        path="/adminpanel"
+
+      {/* Защищенный маршрут: требуется AdminLayout, ProtectedRoute, AdminRoute */}
+      <Route 
+        path="/" 
         element={
           <ProtectedRoute>
             <AdminRoute>
-              <Dashboard />
+              <AdminLayout /> {/* Родительский макет */}
             </AdminRoute>
           </ProtectedRoute>
         }
-      />
+      >
+        {/* Вложенные маршруты для AdminLayout (Dashboard, Roles, Users) */}
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/machines" element={<div className="text-xl">Machines List</div>} />
+        <Route path="/admin/roles" element={<RoleEditor />} />
+        <Route path="/admin/users" element={<UserManager />} />
+        
+        {/* Главная страница админки по умолчанию */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      </Route>
+
+      {/* Перенаправление всех остальных маршрутов на /login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
