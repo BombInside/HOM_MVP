@@ -1,3 +1,5 @@
+// frontend/src/app/slices/authSlice.ts
+
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../../api";
 
@@ -12,31 +14,21 @@ type AuthState = {
   user: User | null;
   loading: boolean;
   error: string | null;
+  isAuthResolved: boolean; // <--- ДОБАВЛЕНО
 };
 
+const initialToken = localStorage.getItem("token"); // <--- ИЗМЕНЕНО
+ 
 const initialState: AuthState = {
-  accessToken: localStorage.getItem("token"),
+  accessToken: initialToken,
   user: null,
   loading: false,
   error: null,
+  isAuthResolved: !initialToken, // <--- ИЗМЕНЕНО: Если нет токена, считаем, что статус уже разрешен. Если есть, ждем fetchCurrentUser.
 };
 
 export const login = createAsyncThunk(
-  "auth/login",
-  async ({ email, password }: { email: string; password: string }, { rejectWithValue }) => {
-    try {
-      const { data } = await api.post("/auth/login", { email, password });
-      if (data?.access_token) localStorage.setItem("token", data.access_token);
-      return data;
-    } catch (err: any) {
-      const msg =
-        err?.response?.data?.detail ||
-        err?.response?.data?.message ||
-        err?.message ||
-        "Login failed";
-      return rejectWithValue(msg);
-    }
-  }
+// ...
 );
 
 export const fetchCurrentUser = createAsyncThunk("auth/me", async (_, { rejectWithValue }) => {
@@ -58,6 +50,7 @@ const slice = createSlice({
       state.user = null;
       state.error = null;
       state.loading = false;
+      state.isAuthResolved = true; // <--- ИЗМЕНЕНО: Выход - это разрешенное состояние.
       localStorage.removeItem("token");
     },
   },
@@ -66,27 +59,31 @@ const slice = createSlice({
       .addCase(login.pending, (s) => {
         s.loading = true;
         s.error = null;
+        s.isAuthResolved = false; // <--- ИЗМЕНЕНО: Логин - неразрешенное состояние
       })
       .addCase(login.fulfilled, (s, action: any) => {
         s.loading = false;
         s.error = null;
         s.accessToken = action.payload?.access_token || null;
         s.user = action.payload?.user || null;
+        s.isAuthResolved = true; // <--- ИЗМЕНЕНО: Успех - разрешенное состояние
       })
       .addCase(login.rejected, (s, action: any) => {
         s.loading = false;
         s.error = action.payload || "Login failed";
+        s.isAuthResolved = true; // <--- ИЗМЕНЕНО: Провал - разрешенное состояние
       })
       .addCase(fetchCurrentUser.fulfilled, (s, action: any) => {
         s.user = action.payload || null;
+        s.isAuthResolved = true; // <--- ИЗМЕНЕНО: Успешно загружено - разрешенное состояние
         if (s.accessToken == null) {
-          // если пришёл user, а токена нет — ничего не делаем;
-          // (обычно сюда попадём только с токеном)
+          // ...
         }
       })
       .addCase(fetchCurrentUser.rejected, (s) => {
         s.user = null;
         s.accessToken = null;
+        s.isAuthResolved = true; // <--- ИЗМЕНЕНО: Ошибка токена - разрешенное состояние
       });
   },
 });
