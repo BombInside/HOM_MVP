@@ -13,8 +13,9 @@ const Login = () => {
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    const res = await dispatch(login({ email, password }));
-    if ((res as any).meta.requestStatus === "fulfilled") {
+    // ИСПРАВЛЕНО: Теперь вызывается корректно с payload { email, password }
+    const res = await dispatch(login({ email, password })); 
+    if (res.meta.requestStatus === "fulfilled") { // Убран (res as any)
       const to = (loc.state as any)?.from || "/adminpanel";
       nav(to);
     }
