@@ -18,8 +18,8 @@ const AuthLoading = () => (
     <div className="min-h-screen flex items-center justify-center text-xl text-gray-500">Загрузка...</div>
 );
 
-// Защита: наличие токена (принимает element, а не children)
-function ProtectedRoute({ element }: { element: JSX.Element }) {
+// Защита: наличие токена (ПЕРЕИМЕНОВАНО: element -> component)
+function ProtectedRoute({ component }: { component: JSX.Element }) {
   const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth);
   const loc = useLocation();
 
@@ -30,11 +30,11 @@ function ProtectedRoute({ element }: { element: JSX.Element }) {
   if (!accessToken) {
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   }
-  return element;
+  return component;
 }
 
-// Защита: наличие прав администратора (принимает element, а не children)
-function AdminRoute({ element }: { element: JSX.Element }) {
+// Защита: наличие прав администратора (ПЕРЕИМЕНОВАНО: element -> component)
+function AdminRoute({ component }: { component: JSX.Element }) {
   const { user, isAuthResolved } = useAppSelector((s) => s.auth);
 
   if (!isAuthResolved) {
@@ -43,7 +43,7 @@ function AdminRoute({ element }: { element: JSX.Element }) {
 
   // user?.is_admin проверяется только после того, как isAuthResolved === true
   if (!user?.is_admin) return <Navigate to="/login" replace />;
-  return element;
+  return component;
 }
 
 function AppInner() {
@@ -67,7 +67,7 @@ function AppInner() {
       {/* Родительский защищенный маршрут. Использует AdminLayout (с Sidebar) как обертку для всех дочерних элементов. */}
       <Route 
         path="/" 
-        element={<ProtectedRoute element={<AdminLayout />} />} 
+        element={<ProtectedRoute component={<AdminLayout />} />} 
       >
         {/* Вложенные маршруты, доступные после аутентификации */}
         
@@ -76,25 +76,25 @@ function AppInner() {
         {/* Dashboard */}
         <Route 
             path="/dashboard" 
-            element={<AdminRoute element={<Dashboard />} />} 
+            element={<AdminRoute component={<Dashboard />} />} 
         />
         
         {/* Машины (требует AdminRoute) */}
         <Route 
             path="/machines" 
-            element={<AdminRoute element={<div className="p-6 text-xl">Machines List (Coming Soon)</div>} />} 
+            element={<AdminRoute component={<div className="p-6 text-xl">Machines List (Coming Soon)</div>} />} 
         />
         
         {/* Роли (новый функционал) */}
         <Route 
             path="/admin/roles" 
-            element={<AdminRoute element={<RoleEditor />} />} 
+            element={<AdminRoute component={<RoleEditor />} />} 
         />
         
         {/* Пользователи (требует AdminRoute) */}
         <Route 
             path="/admin/users" 
-            element={<AdminRoute element={<UserManager />} />} 
+            element={<AdminRoute component={<UserManager />} />} 
         />
         
       </Route>
@@ -112,3 +112,61 @@ export default function AppRouter() {
     </Router>
   );
 }
+```eof
+
+---
+
+## 2. `frontend/src/layouts/AdminLayout.tsx` (Подтверждение)
+
+```typescript:Admin Layout:frontend/src/layouts/AdminLayout.tsx
+import Sidebar from "../components/Sidebar";
+import Topbar from "../components/Topbar";
+import { Outlet } from "react-router-dom";
+
+const AdminLayout = () => {
+  return (
+    <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+      <Topbar />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 p-6">
+          <Outlet /> {/* Здесь будут рендериться вложенные маршруты */}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default AdminLayout;
+```eof
+
+---
+
+## 3. `frontend/src/pages/Admin/Dashboard.tsx` (Подтверждение)
+
+```typescript:Dashboard (удалена Topbar):frontend/src/pages/Admin/Dashboard.tsx
+import ServiceStatus from "../../components/ServiceStatus";
+
+const Dashboard = () => {
+  return (
+    // Удалена Topbar, так как она теперь в AdminLayout
+    <div className="text-gray-900 dark:text-white">
+      <h1 className="text-2xl font-semibold mb-4">Админ-панель</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Статусы сервисов */}
+        <ServiceStatus />
+
+        {/* Заглушки под будущие виджеты */}
+        <div className="p-4 border rounded dark:border-gray-700 bg-white dark:bg-gray-900">
+          Metrics (coming soon)
+        </div>
+        <div className="p-4 border rounded dark:border-gray-700 bg-white dark:bg-gray-900">
+          Recent activity (coming soon)
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
