@@ -111,3 +111,31 @@ const slice = createSlice({
 
 export const { logout } = slice.actions;
 export default slice.reducer;
+
+// Селекторы для роутера и других компонентов
+import type { RootState } from "../store";
+
+// Пользователь авторизован?
+export const selectIsAuthenticated = (state: RootState): boolean => {
+    // Подстрой это под свою реальную структуру состояния,
+    // но чаще всего это что-то вроде:
+    return Boolean(
+        (state as any).auth?.isAuthenticated ??
+        (state as any).auth?.accessToken ??
+        (state as any).auth?.token
+    );
+};
+
+// Роутер может уже принимать решение (auth успел инициализироваться)?
+export const selectIsAuthResolved = (state: RootState): boolean => {
+    // Если в слайсе есть явный флаг isAuthResolved / isLoaded — используй его.
+    const authSlice: any = (state as any).auth || {};
+    if (typeof authSlice.isAuthResolved === "boolean") {
+        return authSlice.isAuthResolved;
+    }
+    if (typeof authSlice.isInitialized === "boolean") {
+        return authSlice.isInitialized;
+    }
+    // Fallback: считаем, что как только есть любая инфа о токене — auth "разрулился"
+    return Boolean(authSlice.isAuthenticated ?? authSlice.accessToken ?? authSlice.token);
+};
