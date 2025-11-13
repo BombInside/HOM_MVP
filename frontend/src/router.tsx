@@ -5,7 +5,7 @@ import {
   Navigate,
   useLocation,
 } from "react-router-dom";
-import { useEffect, ReactNode } from "react";
+import React, { useEffect, ReactNode } from "react";
 import { useAppDispatch, useAppSelector } from "./app/store";
 import { fetchCurrentUser } from "./app/slices/authSlice";
 
@@ -26,13 +26,12 @@ const AuthLoading = () => (
 );
 
 // ===== Защищённые маршруты =====
+interface GuardProps {
+  children: ReactNode;
+}
 
-type GuardProps = {
-  children: JSX.Element;
-};
-
-// Проверка: пользователь залогинен (по accessToken)
-function ProtectedRoute({ children }: GuardProps) {
+// Проверка: пользователь залогинен
+const ProtectedRoute: React.FC<GuardProps> = ({ children }) => {
   const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth);
   const loc = useLocation();
 
@@ -44,11 +43,11 @@ function ProtectedRoute({ children }: GuardProps) {
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   }
 
-  return children;
-}
+  return <>{children}</>;
+};
 
 // Проверка: пользователь — админ
-function AdminRoute({ children }: GuardProps) {
+const AdminRoute: React.FC<GuardProps> = ({ children }) => {
   const { user, isAuthResolved } = useAppSelector((s) => s.auth);
 
   if (!isAuthResolved) {
@@ -59,14 +58,14 @@ function AdminRoute({ children }: GuardProps) {
     return <Navigate to="/login" replace />;
   }
 
-  return children;
-}
+  return <>{children}</>;
+};
 
 function AppInner() {
   const dispatch = useAppDispatch();
   const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth);
 
-  // Тихий автологин по токену при загрузке приложения
+  // Тихий автологин при загрузке приложения
   useEffect(() => {
     if (accessToken && !isAuthResolved) {
       dispatch(fetchCurrentUser());
@@ -84,10 +83,11 @@ function AppInner() {
           </AuthLayout>
         }
       />
-      {/* Bootstrap админа — публичный, но одноразовый сценарий */}
+
+      {/* Bootstrap администратора — публичный */}
       <Route path="/adminpanel/bootstrap" element={<AdminBootstrap />} />
 
-      {/* Защищённый корневой маршрут с общим AdminLayout */}
+      {/* Защищённый root layout */}
       <Route
         path="/"
         element={
@@ -96,10 +96,9 @@ function AppInner() {
           </ProtectedRoute>
         }
       >
-        {/* Редирект с "/" на "/dashboard" */}
         <Route index element={<Navigate to="/dashboard" replace />} />
 
-        {/* Dashboard (любой залогиненный пользователь) */}
+        {/* Dashboard (админ) */}
         <Route
           path="/dashboard"
           element={
@@ -109,7 +108,7 @@ function AppInner() {
           }
         />
 
-        {/* Машины (пока заглушка, доступ только админу) */}
+        {/* Машины */}
         <Route
           path="/machines"
           element={
@@ -119,7 +118,7 @@ function AppInner() {
           }
         />
 
-        {/* Роли (только админ) */}
+        {/* Роли */}
         <Route
           path="/admin/roles"
           element={
@@ -129,7 +128,7 @@ function AppInner() {
           }
         />
 
-        {/* Пользователи (только админ) */}
+        {/* Управление пользователями */}
         <Route
           path="/admin/users"
           element={
@@ -140,7 +139,7 @@ function AppInner() {
         />
       </Route>
 
-      {/* Фолбэк: всё неизвестное отправляем на /login */}
+      {/* Фолбэк */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
