@@ -2,7 +2,7 @@ import ServiceStatus from "../../components/ServiceStatus";
 
 const Dashboard = () => {
   return (
-    // Удалена min-h-screen обертка и Topbar, так как это теперь дочерний компонент AdminLayout
+    // Удалена Topbar, так как она теперь в AdminLayout
     <div className="text-gray-900 dark:text-white">
       <h1 className="text-2xl font-semibold mb-4">Админ-панель</h1>
 

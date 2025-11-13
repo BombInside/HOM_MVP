@@ -17,7 +17,7 @@ const Login = () => {
     const res = await dispatch(login({ email, password })); 
     // ИСПРАВЛЕНИЕ: Используем корректный тип res.
     if (res.meta.requestStatus === "fulfilled") { 
-      const to = (loc.state as any)?.from || "/adminpanel";
+      const to = (loc.state as any)?.from || "/dashboard"; // Перенаправляем на /dashboard
       nav(to);
     }
   };

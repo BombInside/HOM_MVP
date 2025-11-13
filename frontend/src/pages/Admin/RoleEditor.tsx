@@ -1,5 +1,4 @@
 import { useEffect, useState, FormEvent } from "react";
-// Исправлено: использование относительного импорта для API
 import api from "../../api"; 
 import { useTranslation } from "react-i18next";
 import { Trash2, Save, Plus, X, Shield, Lock, SquarePen } from "lucide-react";

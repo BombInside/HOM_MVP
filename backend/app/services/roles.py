@@ -5,6 +5,7 @@ from typing import List, Optional, Any, cast
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException, status
+from sqlalchemy.exc import IntegrityError
 
 from app.services.base import CRUDServiceBase
 from app.models import Role, Permission, RolePermissionLink
