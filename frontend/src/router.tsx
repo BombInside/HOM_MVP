@@ -7,10 +7,10 @@ import {
 } from "react-router-dom";
 
 import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
+import Dashboard from "./pages/Admin/Dashboard";
 import AdminLayout from "./layouts/AdminLayout";
-import UserManager from "./pages/UserManager";
-import RoleEditor from "./pages/RoleEditor";
+import UserManager from "./pages/Admin/UserManager";
+import RoleEditor from "./pages/Admin/RoleEditor";
 
 import { useAppSelector } from "./app/hooks";
 import { selectIsAuthenticated, selectIsAuthResolved } from "./app/slices/authSlice";
