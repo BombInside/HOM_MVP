@@ -9,7 +9,7 @@ const AdminLayout = () => {
       <div className="flex">
         <Sidebar />
         <main className="flex-1 p-6">
-          <Outlet />
+          <Outlet /> {/* Здесь будут рендериться вложенные маршруты */}
         </main>
       </div>
     </div>
