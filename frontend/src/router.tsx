@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, Outlet } from "react-router-dom";
 import { useEffect } from "react";
 import { useAppDispatch, useAppSelector } from "./app/store";
 import { fetchCurrentUser } from "./app/slices/authSlice";
@@ -11,15 +11,15 @@ import UserManager from "./pages/Admin/UserManager";
 
 // Импорт макетов
 import AdminLayout from "./layouts/AdminLayout";
-import AuthLayout from "./layouts/AuthLayout"; // Используем AuthLayout для Login, если он существует
+import AuthLayout from "./layouts/AuthLayout";
 
 // НОВОЕ: Компонент загрузки
 const AuthLoading = () => (
     <div className="min-h-screen flex items-center justify-center text-xl text-gray-500">Загрузка...</div>
 );
 
-// Защита: наличие токена
-function ProtectedRoute({ children }: { children: JSX.Element }) {
+// Защита: наличие токена (принимает element, а не children)
+function ProtectedRoute({ element }: { element: JSX.Element }) {
   const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth);
   const loc = useLocation();
 
@@ -30,19 +30,20 @@ function ProtectedRoute({ children }: { children: JSX.Element }) {
   if (!accessToken) {
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   }
-  return children;
+  return element;
 }
 
-// Защита: наличие прав администратора
-function AdminRoute({ children }: { children: JSX.Element }) {
+// Защита: наличие прав администратора (принимает element, а не children)
+function AdminRoute({ element }: { element: JSX.Element }) {
   const { user, isAuthResolved } = useAppSelector((s) => s.auth);
 
   if (!isAuthResolved) {
     return <AuthLoading />;
   }
 
+  // user?.is_admin проверяется только после того, как isAuthResolved === true
   if (!user?.is_admin) return <Navigate to="/login" replace />;
-  return children;
+  return element;
 }
 
 function AppInner() {
@@ -59,32 +60,46 @@ function AppInner() {
   return (
     <Routes>
       
-      {/* Публичные маршруты (обернуты в AuthLayout, если он нужен) */}
+      {/* Публичные маршруты */}
       <Route path="/login" element={<AuthLayout><Login /></AuthLayout>} />
       <Route path="/adminpanel/bootstrap" element={<AdminBootstrap />} />
 
-      {/* Защищенный маршрут: требуется AdminLayout, ProtectedRoute, AdminRoute */}
+      {/* Родительский защищенный маршрут. Использует AdminLayout (с Sidebar) как обертку для всех дочерних элементов. */}
       <Route 
         path="/" 
-        element={
-          <ProtectedRoute>
-            <AdminRoute>
-              <AdminLayout /> {/* Родительский макет */}
-            </AdminRoute>
-          </ProtectedRoute>
-        }
+        element={<ProtectedRoute element={<AdminLayout />} />} 
       >
-        {/* Вложенные маршруты для AdminLayout (Dashboard, Roles, Users) */}
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/machines" element={<div className="text-xl">Machines List</div>} />
-        <Route path="/admin/roles" element={<RoleEditor />} />
-        <Route path="/admin/users" element={<UserManager />} />
+        {/* Вложенные маршруты, доступные после аутентификации */}
         
-        {/* Главная страница админки по умолчанию */}
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        <Route index element={<Navigate to="/dashboard" replace />} />
+        
+        {/* Dashboard */}
+        <Route 
+            path="/dashboard" 
+            element={<AdminRoute element={<Dashboard />} />} 
+        />
+        
+        {/* Машины (требует AdminRoute) */}
+        <Route 
+            path="/machines" 
+            element={<AdminRoute element={<div className="p-6 text-xl">Machines List (Coming Soon)</div>} />} 
+        />
+        
+        {/* Роли (новый функционал) */}
+        <Route 
+            path="/admin/roles" 
+            element={<AdminRoute element={<RoleEditor />} />} 
+        />
+        
+        {/* Пользователи (требует AdminRoute) */}
+        <Route 
+            path="/admin/users" 
+            element={<AdminRoute element={<UserManager />} />} 
+        />
+        
       </Route>
 
-      {/* Перенаправление всех остальных маршрутов на /login */}
+      {/* Перенаправление всех остальных маршрутов на /login, если не аутентифицирован */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
@@ -97,3 +112,66 @@ export default function AppRouter() {
     </Router>
   );
 }
+```eof
+
+---
+
+## 2. `frontend/src/layouts/AdminLayout.tsx`
+
+Этот файл корректно использует `<Outlet />` для рендеринга вложенного контента.
+
+```typescript:Admin Layout:frontend/src/layouts/AdminLayout.tsx
+import Sidebar from "../components/Sidebar";
+import Topbar from "../components/Topbar";
+import { Outlet } from "react-router-dom";
+
+const AdminLayout = () => {
+  return (
+    <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+      <Topbar />
+      <div className="flex">
+        <Sidebar />
+        <main className="flex-1 p-6">
+          <Outlet /> {/* Здесь будут рендериться вложенные маршруты */}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default AdminLayout;
+```eof
+
+---
+
+## 3. `frontend/src/pages/Admin/Dashboard.tsx`
+
+Удалена дублирующаяся `<Topbar />`.
+
+```typescript:Dashboard (удалена Topbar):frontend/src/pages/Admin/Dashboard.tsx
+import ServiceStatus from "../../components/ServiceStatus";
+
+const Dashboard = () => {
+  return (
+    // Удалена Topbar, так как она теперь в AdminLayout
+    <div className="text-gray-900 dark:text-white">
+      <h1 className="text-2xl font-semibold mb-4">Админ-панель</h1>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Статусы сервисов */}
+        <ServiceStatus />
+
+        {/* Заглушки под будущие виджеты */}
+        <div className="p-4 border rounded dark:border-gray-700 bg-white dark:bg-gray-900">
+          Metrics (coming soon)
+        </div>
+        <div className="p-4 border rounded dark:border-gray-700 bg-white dark:bg-gray-900">
+          Recent activity (coming soon)
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Dashboard;
+```eof
