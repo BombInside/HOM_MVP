@@ -13,13 +13,13 @@ import UserManager from "./pages/Admin/UserManager";
 import AdminLayout from "./layouts/AdminLayout";
 import AuthLayout from "./layouts/AuthLayout";
 
-// НОВОЕ: Компонент загрузки
+// Компонент загрузки
 const AuthLoading = () => (
     <div className="min-h-screen flex items-center justify-center text-xl text-gray-500">Загрузка...</div>
 );
 
-// Защита: наличие токена (ПЕРЕИМЕНОВАНО: element -> component)
-function ProtectedRoute({ component }: { component: JSX.Element }) {
+// Защита: наличие токена (ПЕРЕИМЕНОВАНО: component -> componentToRender)
+function ProtectedRoute({ componentToRender }: { componentToRender: JSX.Element }) {
   const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth);
   const loc = useLocation();
 
@@ -30,11 +30,11 @@ function ProtectedRoute({ component }: { component: JSX.Element }) {
   if (!accessToken) {
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   }
-  return component;
+  return componentToRender;
 }
 
-// Защита: наличие прав администратора (ПЕРЕИМЕНОВАНО: element -> component)
-function AdminRoute({ component }: { component: JSX.Element }) {
+// Защита: наличие прав администратора (ПЕРЕИМЕНОВАНО: component -> componentToRender)
+function AdminRoute({ componentToRender }: { componentToRender: JSX.Element }) {
   const { user, isAuthResolved } = useAppSelector((s) => s.auth);
 
   if (!isAuthResolved) {
@@ -43,7 +43,7 @@ function AdminRoute({ component }: { component: JSX.Element }) {
 
   // user?.is_admin проверяется только после того, как isAuthResolved === true
   if (!user?.is_admin) return <Navigate to="/login" replace />;
-  return component;
+  return componentToRender;
 }
 
 function AppInner() {
@@ -67,8 +67,9 @@ function AppInner() {
       {/* Родительский защищенный маршрут. Использует AdminLayout (с Sidebar) как обертку для всех дочерних элементов. */}
       <Route 
         path="/" 
-        element={<ProtectedRoute component={<AdminLayout />} />} 
+        element={<ProtectedRoute componentToRender={<AdminLayout />} />} 
       >
+        
         {/* Вложенные маршруты, доступные после аутентификации */}
         
         <Route index element={<Navigate to="/dashboard" replace />} />
@@ -76,25 +77,25 @@ function AppInner() {
         {/* Dashboard */}
         <Route 
             path="/dashboard" 
-            element={<AdminRoute component={<Dashboard />} />} 
+            element={<AdminRoute componentToRender={<Dashboard />} />} 
         />
         
         {/* Машины (требует AdminRoute) */}
         <Route 
             path="/machines" 
-            element={<AdminRoute component={<div className="p-6 text-xl">Machines List (Coming Soon)</div>} />} 
+            element={<AdminRoute componentToRender={<div className="p-6 text-xl">Machines List (Coming Soon)</div>} />} 
         />
         
         {/* Роли (новый функционал) */}
         <Route 
             path="/admin/roles" 
-            element={<AdminRoute component={<RoleEditor />} />} 
+            element={<AdminRoute componentToRender={<RoleEditor />} />} 
         />
         
         {/* Пользователи (требует AdminRoute) */}
         <Route 
             path="/admin/users" 
-            element={<AdminRoute component={<UserManager />} />} 
+            element={<AdminRoute componentToRender={<UserManager />} />} 
         />
         
       </Route>
