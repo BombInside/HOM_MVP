@@ -1,112 +1,86 @@
+import React from "react";
 import {
-  BrowserRouter as Router,
-  Routes,
-  Route,
-  Navigate,
-  useLocation,
+    createBrowserRouter,
+    RouterProvider,
+    Outlet,
+    Navigate,
 } from "react-router-dom";
-import React, { useEffect, ReactNode } from "react";
-import { useAppDispatch, useAppSelector } from "./app/store";
-import { fetchCurrentUser } from "./app/slices/authSlice";
 
 import Login from "./pages/Login";
-import AdminBootstrap from "./pages/Admin/AdminBootstrap";
-import Dashboard from "./pages/Admin/Dashboard";
-import RoleEditor from "./pages/Admin/RoleEditor";
-import UserManager from "./pages/Admin/UserManager";
-
+import Dashboard from "./pages/Dashboard";
 import AdminLayout from "./layouts/AdminLayout";
-import AuthLayout from "./layouts/AuthLayout";
+import UserManager from "./pages/UserManager";
+import RoleEditor from "./pages/RoleEditor";
 
-const AuthLoading = () => (
-  <div className="min-h-screen flex items-center justify-center text-xl text-gray-500">
-    Загрузка...
-  </div>
-);
+import { useAppSelector } from "./app/hooks";
+import { selectIsAuthenticated, selectIsAuthResolved } from "./app/slices/authSlice";
 
-type GuardProps = {
-  children: ReactNode;
+/* -------------------------------------------
+   ProtectedRoute (✔️ FIXED FOR TS)
+-------------------------------------------- */
+
+interface ProtectedRouteProps {
+    children: JSX.Element;
+}
+
+const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
+    const isAuthenticated = useAppSelector(selectIsAuthenticated);
+    const isAuthResolved = useAppSelector(selectIsAuthResolved);
+
+    if (!isAuthResolved) return <div>Loading...</div>;
+
+    if (!isAuthenticated) return <Navigate to="/login" replace />;
+
+    return children;
 };
 
-const ProtectedRoute = ({ children }: GuardProps) => {
-  const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth);
-  const loc = useLocation();
+/* -------------------------------------------
+   Layout wrapper to allow nested routing
+-------------------------------------------- */
 
-  if (!isAuthResolved) return <AuthLoading />;
-  if (!accessToken) return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
-
-  return <>{children as JSX.Element}</>;
-};
-
-const AdminRoute = ({ children }: GuardProps) => {
-  const { user, isAuthResolved } = useAppSelector((s) => s.auth);
-
-  if (!isAuthResolved) return <AuthLoading />;
-  if (!user?.is_admin) return <Navigate to="/login" replace />;
-
-  return <>{children as JSX.Element}</>;
-};
-
-function AppInner() {
-  const dispatch = useAppDispatch();
-  const { accessToken, isAuthResolved } = useAppSelector((s) => s.auth);
-
-  useEffect(() => {
-    if (accessToken && !isAuthResolved) dispatch(fetchCurrentUser());
-  }, [accessToken, isAuthResolved]);
-
-  return (
-    <Routes>
-      <Route path="/login" element={<AuthLayout><Login /></AuthLayout>} />
-      <Route path="/adminpanel/bootstrap" element={<AdminBootstrap />} />
-
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
+const AdminWrapper: React.FC = () => {
+    return (
+        <ProtectedRoute>
             <AdminLayout />
-          </ProtectedRoute>
-        }
-      >
-        <Route index element={<Navigate to="/dashboard" replace />} />
+        </ProtectedRoute>
+    );
+};
 
-        <Route
-          path="/dashboard"
-          element={
-            <AdminRoute>
-              <Dashboard />
-            </AdminRoute>
-          }
-        />
+/* -------------------------------------------
+   ROUTER CONFIG
+-------------------------------------------- */
 
-        <Route
-          path="/admin/roles"
-          element={
-            <AdminRoute>
-              <RoleEditor />
-            </AdminRoute>
-          }
-        />
+const router = createBrowserRouter([
+    {
+        path: "/login",
+        element: <Login />,
+    },
+    {
+        path: "/admin",
+        element: <AdminWrapper />,
+        children: [
+            {
+                path: "",
+                element: <Dashboard />,
+            },
+            {
+                path: "users",
+                element: <UserManager />,
+            },
+            {
+                path: "roles",
+                element: <RoleEditor />,
+            },
+        ],
+    },
+    {
+        path: "*",
+        element: <Navigate to="/admin" replace />,
+    },
+]);
 
-        <Route
-          path="/admin/users"
-          element={
-            <AdminRoute>
-              <UserManager />
-            </AdminRoute>
-          }
-        />
-      </Route>
+/* -------------------------------------------
+   Export Provider
+-------------------------------------------- */
 
-      <Route path="*" element={<Navigate to="/login" replace />} />
-    </Routes>
-  );
-}
-
-export default function AppRouter() {
-  return (
-    <Router>
-      <AppInner />
-    </Router>
-  );
-}
+export const AppRouter = () => <RouterProvider router={router} />;
