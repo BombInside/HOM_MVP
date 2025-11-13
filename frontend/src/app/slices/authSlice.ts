@@ -27,11 +27,11 @@ const initialState: AuthState = {
 
 // ИСПРАВЛЕНИЕ: Используем явную типизацию <Return, Payload, Config>
 export const login = createAsyncThunk<
-  // 1. Return type
+  // 1. Return type (Тип, который возвращает API)
   { access_token: string, user: User, token_type: string }, 
-  // 2. Payload (Input) type
+  // 2. Payload (Input) type (Тип входящих данных для thunk)
   { email: string; password: string }, 
-  // 3. Config type
+  // 3. Config type (Тип конфигурации, включая rejectValue)
   { rejectValue: string } 
 >(
   "auth/login",
