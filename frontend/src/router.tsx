@@ -174,4 +174,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-```eof
