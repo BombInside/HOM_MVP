@@ -12,7 +12,7 @@ import AdminLayout from "./layouts/AdminLayout";
 import UserManager from "./pages/Admin/UserManager";
 import RoleEditor from "./pages/Admin/RoleEditor";
 
-//import { useAppSelector } from "./app/hooks";
+import { useAppSelector } from "./app/hooks";
 import { selectIsAuthenticated, selectIsAuthResolved } from "./app/slices/authSlice";
 
 /* -------------------------------------------
