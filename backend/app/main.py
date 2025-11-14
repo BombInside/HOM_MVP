@@ -16,14 +16,16 @@ from app.admin_panel import router as admin_router
 from app.routes_auth import router as auth_router
 from app.api.system import router as system_router
 # НОВЫЙ ИМПОРТ: Роутер для управления ролями
-from app.api.adminpanel import roles as roles_router 
+from app.api.adminpanel import roles as roles_router
+# НОВЫЙ ИМПОРТ: Роутер для управления правами (permissions)
+from app.api.adminpanel import permissions as permissions_router
 
 # Роутеры домена и аудит
 from app.api.equipment import lines, machines, repairs, repair_attachments
 from app.api import audit_log
 from app.middleware.audit_middleware import AuditUserMiddleware
 from app.models import Base
-#from app.core.audit_listeners import attach_audit_events 
+# from app.core.audit_listeners import attach_audit_events
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -55,30 +57,30 @@ app.add_middleware(
 app.add_middleware(SessionMiddleware, secret_key=(settings.JWT_SECRET or "insecure"))
 app.add_middleware(AuditUserMiddleware)
 
-# Подключаем аудит изменений
-#attach_audit_events(Base)
+# Подключаем аудит изменений (пока отключен)
+# attach_audit_events(Base)
 
 # ==========================================================
 # Роутеры
 # ==========================================================
 
 # Системные и базовые
-app.include_router(auth_router)             # /auth/*
-app.include_router(admin_router)            # /adminpanel/*
-app.include_router(system_router)           # /health/*
+app.include_router(auth_router)               # /auth/*
+app.include_router(admin_router)              # /adminpanel/*
+app.include_router(system_router)             # /health/*
 
-# ДОБАВЛЕНО: Роутер для управления ролями и правами
-app.include_router(roles_router.router, prefix="/adminpanel") # type: ignore[attr-defined]
+# Админ-панель: роли и права
+app.include_router(roles_router.router, prefix="/adminpanel")        # type: ignore[attr-defined]
+app.include_router(permissions_router.router, prefix="/adminpanel")  # type: ignore[attr-defined]
 
 # Доменные
-app.include_router(lines.router, prefix="/api")                 # type: ignore[attr-defined]
-app.include_router(machines.router, prefix="/api")              # type: ignore[attr-defined]
-app.include_router(repairs.router, prefix="/api")               # type: ignore[attr-defined]
-app.include_router(repair_attachments.router, prefix="/api")   # type: ignore[attr-defined]
+app.include_router(lines.router, prefix="/api")               # type: ignore[attr-defined]
+app.include_router(machines.router, prefix="/api")            # type: ignore[attr-defined]
+app.include_router(repairs.router, prefix="/api")             # type: ignore[attr-defined]
+app.include_router(repair_attachments.router, prefix="/api")  # type: ignore[attr-defined]
 
 # Аудит
-app.include_router(audit_log.router, prefix="/api")             # type: ignore[attr-defined]
-
+app.include_router(audit_log.router, prefix="/api")           # type: ignore[attr-defined]
 
 # ==========================================================
 # События приложения
@@ -95,4 +97,7 @@ async def on_startup() -> None:
 @app.get("/", include_in_schema=False)
 async def root() -> dict[str, str]:
     """Корневой эндпоинт."""
-    return {"app": settings.APP_NAME, "env": getattr(settings, "APP_ENV", "stage")}
+    return {
+        "app": settings.APP_NAME,
+        "env": getattr(settings, "APP_ENV", "stage"),
+    }
