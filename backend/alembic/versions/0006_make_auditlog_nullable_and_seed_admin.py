@@ -4,7 +4,7 @@ from alembic import op
 import sqlalchemy as sa
 
 # revision identifiers
-revision = "0006_make_auditlog_nullable_and_seed_admin"
+revision = "0006_auditlog_nullable"  # <= 32 символов
 down_revision = "0005_seed_admin_role"
 branch_labels = None
 depends_on = None
