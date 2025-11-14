@@ -1,8 +1,7 @@
-"""Make audit_log.object_id nullable and seed admin role/permissions"""
+"""Make audit_log.object_id nullable and seed admin role/permissions (aligned with permission.code)"""
 
 from alembic import op
 import sqlalchemy as sa
-from datetime import datetime
 
 # revision identifiers
 revision = "0006_make_auditlog_nullable_and_seed_admin"
@@ -20,55 +19,87 @@ def upgrade() -> None:
         nullable=True,
     )
 
-    # 2️⃣ Добавить базовые роли и права
+    # 2️⃣ Добавить базовые роли и права, согласованные с 0001_init/0005
     conn = op.get_bind()
+    inspector = sa.inspect(conn)
 
-    # создаём permission'ы
+    # Если нет permission / role / role_permission_link — просто выходим
+    if not inspector.has_table("permission") or not inspector.has_table(
+        "role"
+    ) or not inspector.has_table("role_permission_link"):
+        print(
+            "⚠️ permission/role/role_permission_link table missing, skipping seeding."
+        )
+        return
+
+    perm_columns = [c["name"] for c in inspector.get_columns("permission")]
+    if "code" not in perm_columns:
+        print(
+            "⚠️ permission table does not have 'code' column; skipping seeding to avoid schema conflicts."
+        )
+        return
+
+    # создаём дополнительные permission'ы (через code)
     permissions = [
-        {"name": "view", "description": "View records"},
-        {"name": "edit", "description": "Edit records"},
-        {"name": "delete", "description": "Delete records"},
-        {"name": "admin", "description": "Full administrative access"},
+        {"code": "view", "description": "View records"},
+        {"code": "edit", "description": "Edit records"},
+        {"code": "delete", "description": "Delete records"},
+        {"code": "admin", "description": "Full administrative access"},
     ]
     for perm in permissions:
         conn.execute(
             sa.text(
                 """
-                INSERT INTO permission (name, description)
-                VALUES (:name, :description)
-                ON CONFLICT (name) DO NOTHING
+                INSERT INTO permission (code, description)
+                VALUES (:code, :description)
+                ON CONFLICT (code) DO NOTHING
                 """
             ),
             perm,
         )
 
-    # создаём роль Admin
-    conn.execute(
-        sa.text(
-            """
-            INSERT INTO role (name, description)
-            VALUES ('Admin', 'Full access')
-            ON CONFLICT (name) DO NOTHING
-            """
+    # создаём/находим роль admin (учитываем разные варианты имени)
+    admin_id = conn.execute(
+        sa.text("SELECT id FROM role WHERE lower(name) = 'admin'")
+    ).scalar()
+    if not admin_id:
+        conn.execute(
+            sa.text(
+                """
+                INSERT INTO role (name, description)
+                VALUES ('admin', 'Full access')
+                ON CONFLICT (name) DO NOTHING
+                """
+            )
         )
-    )
+        admin_id = conn.execute(
+            sa.text("SELECT id FROM role WHERE lower(name) = 'admin'")
+        ).scalar()
 
-    # привязка прав к Admin
+    if not admin_id:
+        print("⚠️ Could not ensure admin role; skipping permission linking.")
+        return
+
+    # привязка всех прав к admin
     conn.execute(
         sa.text(
             """
             INSERT INTO role_permission_link (role_id, permission_id)
-            SELECT r.id, p.id FROM role r, permission p
-            WHERE r.name = 'Admin'
+            SELECT :admin_id, p.id
+            FROM permission p
             ON CONFLICT DO NOTHING
             """
-        )
+        ),
+        {"admin_id": admin_id},
     )
 
-    print("✅ audit_log.object_id is now nullable; Admin role and base permissions seeded")
+    print(
+        "✅ audit_log.object_id is now nullable; admin role and base permissions ensured/linked"
+    )
 
 
 def downgrade() -> None:
+    # Возвращаем object_id к NOT NULL
     op.alter_column(
         "audit_log",
         "object_id",
@@ -76,8 +107,23 @@ def downgrade() -> None:
         nullable=False,
     )
 
-    op.execute("DELETE FROM role_permission_link WHERE role_id IN (SELECT id FROM role WHERE name='Admin');")
-    op.execute("DELETE FROM role WHERE name='Admin';")
-    for name in ["view", "edit", "delete", "admin"]:
-        op.execute(f"DELETE FROM permission WHERE name='{name}';")
-    print("🔁 audit_log.object_id reverted and Admin role removed")
+    conn = op.get_bind()
+
+    # Чистка связей и базовых добавленных кодов (осторожно, без трогания 0001_init)
+    conn.execute(
+        sa.text(
+            "DELETE FROM role_permission_link WHERE role_id IN (SELECT id FROM role WHERE lower(name) = 'admin');"
+        )
+    )
+    for code in ["view", "edit", "delete", "admin"]:
+        conn.execute(
+            sa.text("DELETE FROM permission WHERE code = :code"),
+            {"code": code},
+        )
+
+    # Роль 'Admin' (с заглавной) чистим отдельно, чтобы не трогать 'admin'
+    conn.execute(sa.text("DELETE FROM role WHERE name='Admin';"))
+
+    print(
+        "🔁 audit_log.object_id reverted and additional admin-related permissions cleaned up"
+    )
